@@ -17,8 +17,8 @@ import { cn } from '@/src/lib/utils';
 import { Input } from '@/src/components/ui/input';
 
 const navItems = [
-  { name: 'Visão Executiva', path: '/visao-executiva', icon: LayoutDashboard },
-  { name: 'Qualidade do Painel', path: '/dashboard/qualidade', icon: PieChart },
+  { name: 'Cobertura e MDV', path: '/visao-executiva', icon: LayoutDashboard },
+  { name: 'Visitação x Segmentação', path: '/visitacao-x-segmentacao', icon: PieChart },
   { name: 'Alocação de Recursos', path: '/dashboard/amostras', icon: BarChart3 },
   { name: 'Target List', path: '/dashboard/target-list', icon: Target },
 ];
@@ -48,7 +48,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar */}
       <aside className={cn(
-        "w-64 bg-white border-r border-slate-200 flex flex-col h-screen fixed md:sticky top-0 z-50 transition-transform duration-300 ease-in-out",
+        "w-64 bg-white border-r border-slate-200 flex flex-col h-screen fixed top-0 left-0 z-50 transition-transform duration-300 ease-in-out",
         isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       )}>
         {/* User Profile */}

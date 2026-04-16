@@ -5,87 +5,130 @@ import { produtividade_ciclo } from '@/src/lib/db/schema';
 import { sql, eq, and } from 'drizzle-orm';
 
 export async function getExecutiveMetrics(
-  cicloAtual: string = 'CICLO 02',
-  cicloAnterior: string = 'CICLO 01',
-  distrito: string = 'Todos'
+  ciclo: string = 'Todos',
+  distrito: string = 'Todos',
+  estrutura: string = 'Distrito',
+  setor: string = 'Todos'
 ) {
-  const whereClauseAtual = distrito !== 'Todos' 
-    ? and(eq(produtividade_ciclo.ciclo, cicloAtual), eq(produtividade_ciclo.distrito, distrito))
-    : eq(produtividade_ciclo.ciclo, cicloAtual);
-
-  const whereClauseAnterior = distrito !== 'Todos'
-    ? and(eq(produtividade_ciclo.ciclo, cicloAnterior), eq(produtividade_ciclo.distrito, distrito))
-    : eq(produtividade_ciclo.ciclo, cicloAnterior);
-
-  const defaultData = {
-    kpis: {
-      coberturaAtual: 84.2,
-      mdvAtual: 12.4,
-      coberturaAnterior: 81.8,
-      mdvAnterior: 11.6,
-    },
-    chartData: [
-      { name: 'Norte', ciclo01: 82, cicloAtual: 85, mdv01: 11.2, mdvAtual: 12.1 },
-      { name: 'Sul', ciclo01: 78, cicloAtual: 81, mdv01: 10.8, mdvAtual: 11.5 },
-      { name: 'Leste', ciclo01: 85, cicloAtual: 88, mdv01: 12.5, mdvAtual: 13.2 },
-      { name: 'Oeste', ciclo01: 80, cicloAtual: 83, mdv01: 11.5, mdvAtual: 12.4 },
-    ]
-  };
+  const ciclosDisponiveis = ['CICLO 01', 'CICLO 02', 'CICLO 03'];
+  
+  // Trata ciclos selecionados (pode vir como "CICLO 01,CICLO 03" ou "Todos")
+  const selectedCycles = ciclo === 'Todos' 
+    ? ciclosDisponiveis 
+    : ciclo.split(',').filter(Boolean);
 
   try {
-    if (!db) return defaultData;
+    if (!db) {
+      throw new Error("Database not connected");
+    }
 
-    const metricsAtualPromise = db
-      .select({
-        cobertura: sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.cad_final_ciclo}), 0) * 100`,
-        mdv: sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.dias_trab}), 0)`,
-      })
-      .from(produtividade_ciclo)
-      .where(whereClauseAtual);
+    const metricsWhere = (c: string) => and(
+      eq(produtividade_ciclo.ciclo, c),
+      distrito !== 'Todos' ? eq(produtividade_ciclo.distrito, distrito) : undefined,
+      estrutura === 'Setor' && setor !== 'Todos'
+        ? eq(produtividade_ciclo.setor_cliente, setor)
+        : undefined,
+    );
 
-    const metricsAnteriorPromise = db
-      .select({
-        cobertura: sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.cad_final_ciclo}), 0) * 100`,
-        mdv: sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.dias_trab}), 0)`,
-      })
-      .from(produtividade_ciclo)
-      .where(whereClauseAnterior);
+    const getMetrics = (c: string) => db.select({
+      cobertura: sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.cad_final_ciclo}), 0) * 100`,
+      mdv:       sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.dias_trab}), 0)`,
+    }).from(produtividade_ciclo).where(metricsWhere(c));
 
-    const chartDataPromise = db
-      .select({
-        name: produtividade_ciclo.distrito,
-        cicloAtual: sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAtual} THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAtual} THEN ${produtividade_ciclo.cad_final_ciclo} ELSE 0 END), 0) * 100`,
-        cicloAnterior: sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAnterior} THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAnterior} THEN ${produtividade_ciclo.cad_final_ciclo} ELSE 0 END), 0) * 100`,
-        mdvAtual: sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAtual} THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAtual} THEN ${produtividade_ciclo.dias_trab} ELSE 0 END), 0)`,
-        mdvAnterior: sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAnterior} THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = ${cicloAnterior} THEN ${produtividade_ciclo.dias_trab} ELSE 0 END), 0)`,
-      })
-      .from(produtividade_ciclo)
-      .groupBy(produtividade_ciclo.distrito);
-
-    const [mAtual, mAnterior, chart] = await Promise.all([
-      metricsAtualPromise.catch(() => []),
-      metricsAnteriorPromise.catch(() => []),
-      chartDataPromise.catch(() => [])
+    const [m01, m02, m03] = await Promise.all([
+      getMetrics('CICLO 01').catch(() => []),
+      getMetrics('CICLO 02').catch(() => []),
+      getMetrics('CICLO 03').catch(() => []),
     ]);
 
-    if (!mAtual[0]?.cobertura && chart.length === 0) return defaultData;
+    // Gráfico: agrupa por Setor ou por Distrito conforme estrutura
+    let chartDataPromise;
+
+    const selectFields = {
+      name: estrutura === 'Setor' ? produtividade_ciclo.setor_cliente : produtividade_ciclo.distrito,
+      ciclo01: sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 01' THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 01' THEN ${produtividade_ciclo.cad_final_ciclo} ELSE 0 END), 0) * 100`,
+      ciclo02: sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 02' THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 02' THEN ${produtividade_ciclo.cad_final_ciclo} ELSE 0 END), 0) * 100`,
+      ciclo03: sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 03' THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 03' THEN ${produtividade_ciclo.cad_final_ciclo} ELSE 0 END), 0) * 100`,
+      mdv01:   sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 01' THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 01' THEN ${produtividade_ciclo.dias_trab} ELSE 0 END), 0)`,
+      mdv02:   sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 02' THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 02' THEN ${produtividade_ciclo.dias_trab} ELSE 0 END), 0)`,
+      mdv03:   sql<number>`SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 03' THEN ${produtividade_ciclo.vis_total} ELSE 0 END)::float / NULLIF(SUM(CASE WHEN ${produtividade_ciclo.ciclo} = 'CICLO 03' THEN ${produtividade_ciclo.dias_trab} ELSE 0 END), 0)`,
+    };
+
+    if (estrutura === 'Setor') {
+      const distritoEfetivo = distrito !== 'Todos' ? distrito : 'MG/CO';
+      chartDataPromise = db.select(selectFields)
+      .from(produtividade_ciclo)
+      .where(and(
+        eq(produtividade_ciclo.distrito, distritoEfetivo),
+        setor !== 'Todos' ? eq(produtividade_ciclo.setor_cliente, setor) : undefined,
+      ))
+      .groupBy(produtividade_ciclo.setor_cliente)
+      .orderBy(produtividade_ciclo.setor_cliente);
+    } else {
+      chartDataPromise = db.select(selectFields)
+      .from(produtividade_ciclo)
+      .where(and(
+        distrito !== 'Todos' ? eq(produtividade_ciclo.distrito, distrito) : undefined
+      ))
+      .groupBy(produtividade_ciclo.distrito)
+      .orderBy(produtividade_ciclo.distrito);
+    }
+
+    const setoresPromise =
+      estrutura === 'Setor' && distrito !== 'Todos'
+        ? db.selectDistinct({ setor: produtividade_ciclo.setor_cliente })
+            .from(produtividade_ciclo)
+            .where(and(
+              eq(produtividade_ciclo.distrito, distrito),
+              // Para buscar setores, usamos o último ciclo da seleção
+              eq(produtividade_ciclo.ciclo, selectedCycles[selectedCycles.length - 1]),
+            ))
+            .orderBy(produtividade_ciclo.setor_cliente) as unknown as Promise<{ setor: string }[]>
+        : Promise.resolve([] as { setor: string }[]);
+
+    const [chart, setoresResult] = await Promise.all([
+      chartDataPromise.catch(() => []),
+      setoresPromise.catch(() => []),
+    ]);
+
+    // O KPI "selecionado" será o mais recente da lista de selecionados
+    const lastSelected = selectedCycles[selectedCycles.length - 1] || 'CICLO 01';
+    const mSelected = lastSelected === 'CICLO 01' ? m01 : (lastSelected === 'CICLO 02' ? m02 : m03);
+    
+    // O KPI "anterior" será o ciclo imediatamente anterior ao selecionado (mesmo que não esteja na lista)
+    const idx = ciclosDisponiveis.indexOf(lastSelected);
+    const prevCycle = idx > 0 ? ciclosDisponiveis[idx - 1] : null;
+    const mPrev = prevCycle === 'CICLO 01' ? m01 : (prevCycle === 'CICLO 02' ? m02 : null);
 
     return {
       kpis: {
-        coberturaAtual: Number(mAtual[0]?.cobertura || 0),
-        mdvAtual: Number(mAtual[0]?.mdv || 0),
-        coberturaAnterior: Number(mAnterior[0]?.cobertura || 0),
-        mdvAnterior: Number(mAnterior[0]?.mdv || 0),
+        ciclo01: { cobertura: Number(m01[0]?.cobertura || 0), mdv: Number(m01[0]?.mdv || 0) },
+        ciclo02: { cobertura: Number(m02[0]?.cobertura || 0), mdv: Number(m02[0]?.mdv || 0) },
+        ciclo03: { cobertura: Number(m03[0]?.cobertura || 0), mdv: Number(m03[0]?.mdv || 0) },
+        selected: {
+          cobertura: Number(mSelected[0]?.cobertura || 0),
+          mdv:       Number(mSelected[0]?.mdv || 0),
+        },
+        previous: mPrev ? {
+          cobertura: Number(mPrev[0]?.cobertura || 0),
+          mdv:       Number(mPrev[0]?.mdv || 0),
+        } : null,
+        amostras: "3.5",
+        diasRestantes: 8
       },
-      chartData: chart.map(d => ({
-        name: d.name,
-        ciclo01: Number(d.cicloAnterior || 0),
-        cicloAtual: Number(d.cicloAtual || 0),
-        mdv01: Number(d.mdvAnterior || 0),
-        mdvAtual: Number(d.mdvAtual || 0),
+      chartData: chart.map((d: any) => ({
+        name:    d.name,
+        ciclo01: Number(d.ciclo01 || 0),
+        ciclo02: Number(d.ciclo02 || 0),
+        ciclo03: Number(d.ciclo03 || 0),
+        mdv01:   Number(d.mdv01 || 0),
+        mdv02:   Number(d.mdv02 || 0),
+        mdv03:   Number(d.mdv03 || 0),
       })),
+      availableSetores: setoresResult.map((s) => s.setor),
     };
   } catch (e) {
-    return defaultData;
+    console.error('getExecutiveMetrics error:', e);
+    throw e;
   }
 }
