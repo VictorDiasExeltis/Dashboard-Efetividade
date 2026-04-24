@@ -21,32 +21,25 @@ import {
 } from "@/src/components/ui/select";
 
 import { Button } from '@/src/components/ui/button';
-import { MoreHorizontal, FileText, X } from 'lucide-react';
+import { MoreHorizontal, FileText, X, Shield, Target, UserCheck, Eye, HelpCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { useState } from 'react';
 
 // Dummy data based on the image
 const dummyData = [
-  { label: 'PROTEGER', sim: '83%', nao: '17%' },
-  { label: 'CONQUISTAR', sim: '79%', nao: '21%' },
-  { label: 'MANTER', sim: '81%', nao: '19%' },
-  { label: 'OBSERVAR', sim: '77%', nao: '23%' },
-  { label: 'SEM SEGMENTAÇÃO', sim: '74%', nao: '26%' },
+  { label: 'PROTEGER', sim: '83%', simNum: 1033, nao: '17%', naoNum: 212 },
+  { label: 'CONQUISTAR', sim: '79%', simNum: 676, nao: '21%', naoNum: 180 },
+  { label: 'MANTER', sim: '81%', simNum: 1703, nao: '19%', naoNum: 400 },
+  { label: 'OBSERVAR', sim: '77%', simNum: 333, nao: '23%', naoNum: 99 },
+  { label: 'SEM SEGMENTAÇÃO', sim: '74%', simNum: 95, nao: '26%', naoNum: 33 },
 ];
 
-const totalData = { sim: '79%', nao: '21%' };
+const totalData = { sim: '79%', simNum: 3840, nao: '21%', naoNum: 924 };
 
 interface SegmentacaoTableProps {
   productName: string;
 }
 
 const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({ productName }) => {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedRow, setSelectedRow] = useState<any>(null);
-
-  const openDetails = (row: any) => {
-    setSelectedRow(row);
-    setIsDialogOpen(true);
-  };
 
   return (
     <>
@@ -54,7 +47,7 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({ productName }) => {
         <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-slate-800">{productName}</h3>
-            <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">Contagem de CRM</span>
+            <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">Número de Médicos</span>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -64,20 +57,23 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({ productName }) => {
                 <th className="px-4 py-3 font-medium">Segmentação</th>
                 <th className="px-4 py-3 font-medium">Sim</th>
                 <th className="px-4 py-3 font-medium">Não</th>
-                <th className="px-4 py-3 font-medium text-right">Ações</th>
               </tr>
             </thead>
             <tbody>
               {dummyData.map((row, i) => (
                 <tr key={i} className="bg-white border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-900">{row.label}</td>
-                  <td className="px-4 py-3 text-slate-600">{row.sim}</td>
-                  <td className="px-4 py-3 text-slate-600">{row.nao}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Button variant="ghost" size="sm" onClick={() => openDetails(row)} className="text-slate-500 hover:text-slate-900 h-8 font-medium">
-                      <FileText className="w-4 h-4 mr-2" />
-                      Detalhes
-                    </Button>
+                  <td className="px-4 py-3 text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-900">{row.simNum.toLocaleString('pt-BR')}</span>
+                      <span className="text-xs font-medium text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-md">{row.sim}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-900">{row.naoNum.toLocaleString('pt-BR')}</span>
+                      <span className="text-xs font-medium text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-md">{row.nao}</span>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -85,63 +81,35 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({ productName }) => {
             <tfoot className="bg-slate-50 font-semibold text-slate-900 border-t border-slate-200">
               <tr>
                 <td className="px-4 py-3">Total Geral</td>
-                <td className="px-4 py-3">{totalData.sim}</td>
-                <td className="px-4 py-3">{totalData.nao}</td>
-                <td className="px-4 py-3"></td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-900">{totalData.simNum.toLocaleString('pt-BR')}</span>
+                    <span className="text-xs font-medium text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-md">{totalData.sim}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-900">{totalData.naoNum.toLocaleString('pt-BR')}</span>
+                    <span className="text-xs font-medium text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-md">{totalData.nao}</span>
+                  </div>
+                </td>
               </tr>
             </tfoot>
           </table>
         </div>
       </Card>
-
-      {/* Simple Custom Dialog */}
-      {isDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h2 className="text-lg font-semibold text-slate-800">Detalhes de Análise</h2>
-              <button onClick={() => setIsDialogOpen(false)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Produto</p>
-                <p className="text-base text-slate-900 font-semibold">{productName}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <p className="text-xs font-medium text-slate-500 uppercase">Segmentação</p>
-                  <p className="text-sm text-slate-900 font-bold mt-1">{selectedRow?.label}</p>
-                </div>
-                <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                  <p className="text-xs font-medium text-emerald-600 uppercase">Taxa de Sim</p>
-                  <p className="text-sm text-emerald-900 font-bold mt-1">{selectedRow?.sim}</p>
-                </div>
-              </div>
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                <h4 className="text-sm font-semibold text-blue-900 mb-1">Resumo das Ações</h4>
-                <p className="text-sm text-blue-800">Para a segmentação {selectedRow?.label}, {selectedRow?.sim} do painel respondeu positivamente nos registros de CRM para o produto {productName}.</p>
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <Button onClick={() => setIsDialogOpen(false)}>Fechar</Button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };
 
 export default function VisitacaoXSegmentacao() {
   const products = [
+    "FAMÍLIA REGENESIS",
+    "SLINDA",
     "GYNOTRAN",
-    "PIOSAN",
-    "ALERGOL",
-    "DERMOVAT",
-    "XAROPE C",
-    "CARDIO V",
+    "GYMPRO",
+    "HEMOLIP",
+    "UMMA",
   ];
 
   return (
@@ -158,6 +126,67 @@ export default function VisitacaoXSegmentacao() {
             <SegmentacaoFilters />
           </Suspense>
         </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {[
+          {
+            title: "Faz TH e Pré-Natal",
+            value: "1.245",
+            description: "Médicos nesta classificação",
+            icon: Shield,
+            color: "text-blue-600",
+            bg: "bg-blue-50"
+          },
+          {
+            title: "Não Faz TH e Pré-Natal",
+            value: "856",
+            description: "Médicos nesta classificação",
+            icon: Target,
+            color: "text-emerald-600",
+            bg: "bg-emerald-50"
+          },
+          {
+            title: "Médico de TH",
+            value: "2.103",
+            description: "Médicos nesta classificação",
+            icon: UserCheck,
+            color: "text-amber-600",
+            bg: "bg-amber-50"
+          },
+          {
+            title: "Médico de Pré-Natal",
+            value: "432",
+            description: "Médicos nesta classificação",
+            icon: Eye,
+            color: "text-purple-600",
+            bg: "bg-purple-50"
+          },
+          {
+            title: "Sem Classificação",
+            value: "128",
+            description: "Médicos não classificados",
+            icon: HelpCircle,
+            color: "text-slate-600",
+            bg: "bg-slate-100"
+          }
+        ].map((kpi) => (
+          <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white overflow-hidden">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-2 rounded-lg ${kpi.bg}`}>
+                  <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
+                <h3 className="text-2xl font-bold text-slate-900">{kpi.value}</h3>
+                <p className="text-xs text-slate-400">{kpi.description}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

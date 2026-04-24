@@ -2,7 +2,7 @@
 
 import { db } from '@/src/lib/db';
 import { produtividade_ciclo } from '@/src/lib/db/schema';
-import { sql, eq, and } from 'drizzle-orm';
+import { sql, eq, and, inArray } from 'drizzle-orm';
 
 export async function getExecutiveMetrics(
   ciclo: string = 'Todos',
@@ -22,24 +22,41 @@ export async function getExecutiveMetrics(
       throw new Error("Database not connected");
     }
 
-    const metricsWhere = (c: string) => and(
-      eq(produtividade_ciclo.ciclo, c),
+    const metricsWhere = (cycles: string[]) => and(
+      inArray(produtividade_ciclo.ciclo, cycles),
       distrito !== 'Todos' ? eq(produtividade_ciclo.distrito, distrito) : undefined,
       estrutura === 'Setor' && setor !== 'Todos'
         ? eq(produtividade_ciclo.setor_cliente, setor)
         : undefined,
     );
 
-    const getMetrics = (c: string) => db.select({
+    const getMetrics = (cycles: string[]) => db.select({
       cobertura: sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.cad_final_ciclo}), 0) * 100`,
       mdv:       sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.dias_trab}), 0)`,
-    }).from(produtividade_ciclo).where(metricsWhere(c));
+      visitasTotais: sql<number>`SUM(${produtividade_ciclo.vis_total})`,
+      contatos:      sql<number>`SUM(${produtividade_ciclo.vis_total})`, // Usando vis_total pois não há campo de médicos únicos neste nível de agregação
+    }).from(produtividade_ciclo).where(metricsWhere(cycles));
 
-    const [m01, m02, m03] = await Promise.all([
-      getMetrics('CICLO 01').catch(() => []),
-      getMetrics('CICLO 02').catch(() => []),
-      getMetrics('CICLO 03').catch(() => []),
+    const brasilWhere = (cycles: string[]) => inArray(produtividade_ciclo.ciclo, cycles);
+
+    const getBrasilMetrics = (cycles: string[]) => db.select({
+      cobertura: sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.cad_final_ciclo}), 0) * 100`,
+      mdv:       sql<number>`SUM(${produtividade_ciclo.vis_total})::float / NULLIF(SUM(${produtividade_ciclo.dias_trab}), 0)`,
+    }).from(produtividade_ciclo).where(brasilWhere(cycles));
+
+    const [m01Result, m02Result, m03Result, mSelectedResult, mBrasilSelectedResult] = await Promise.all([
+      getMetrics(['CICLO 01']).catch(() => []),
+      getMetrics(['CICLO 02']).catch(() => []),
+      getMetrics(['CICLO 03']).catch(() => []),
+      getMetrics(selectedCycles).catch(() => []),
+      getBrasilMetrics(selectedCycles).catch(() => []),
     ]);
+
+    const m01 = m01Result[0];
+    const m02 = m02Result[0];
+    const m03 = m03Result[0];
+    const mSelected = mSelectedResult[0];
+    const mBrasilSelected = mBrasilSelectedResult[0];
 
     // Gráfico: agrupa por Setor ou por Distrito conforme estrutura
     let chartDataPromise;
@@ -93,7 +110,6 @@ export async function getExecutiveMetrics(
 
     // O KPI "selecionado" será o mais recente da lista de selecionados
     const lastSelected = selectedCycles[selectedCycles.length - 1] || 'CICLO 01';
-    const mSelected = lastSelected === 'CICLO 01' ? m01 : (lastSelected === 'CICLO 02' ? m02 : m03);
     
     // O KPI "anterior" será o ciclo imediatamente anterior ao selecionado (mesmo que não esteja na lista)
     const idx = ciclosDisponiveis.indexOf(lastSelected);
@@ -102,18 +118,23 @@ export async function getExecutiveMetrics(
 
     return {
       kpis: {
-        ciclo01: { cobertura: Number(m01[0]?.cobertura || 0), mdv: Number(m01[0]?.mdv || 0) },
-        ciclo02: { cobertura: Number(m02[0]?.cobertura || 0), mdv: Number(m02[0]?.mdv || 0) },
-        ciclo03: { cobertura: Number(m03[0]?.cobertura || 0), mdv: Number(m03[0]?.mdv || 0) },
+        ciclo01: { cobertura: Number(m01?.cobertura || 0), mdv: Number(m01?.mdv || 0) },
+        ciclo02: { cobertura: Number(m02?.cobertura || 0), mdv: Number(m02?.mdv || 0) },
+        ciclo03: { cobertura: Number(m03?.cobertura || 0), mdv: Number(m03?.mdv || 0) },
         selected: {
-          cobertura: Number(mSelected[0]?.cobertura || 0),
-          mdv:       Number(mSelected[0]?.mdv || 0),
+          cobertura: Number(mSelected?.cobertura || 0),
+          mdv:       Number(mSelected?.mdv || 0),
+          visitasTotais: Number(mSelected?.visitasTotais || 0),
+          contatos:      Number(mSelected?.contatos || 0),
+        },
+        brasilSelected: {
+          cobertura: Number(mBrasilSelected?.cobertura || 0),
+          mdv:       Number(mBrasilSelected?.mdv || 0),
         },
         previous: mPrev ? {
           cobertura: Number(mPrev[0]?.cobertura || 0),
           mdv:       Number(mPrev[0]?.mdv || 0),
         } : null,
-        amostras: "3.5",
         diasRestantes: 8
       },
       chartData: chart.map((d: any) => ({
@@ -130,5 +151,24 @@ export async function getExecutiveMetrics(
   } catch (e) {
     console.error('getExecutiveMetrics error:', e);
     throw e;
+  }
+}
+
+export async function getAvailableSetores(distrito: string = 'Todos') {
+  try {
+    if (!db) return [];
+    
+    const query = db.selectDistinct({ setor: produtividade_ciclo.setor_cliente })
+      .from(produtividade_ciclo);
+      
+    if (distrito !== 'Todos') {
+      query.where(eq(produtividade_ciclo.distrito, distrito));
+    }
+    
+    const result = await query.orderBy(produtividade_ciclo.setor_cliente);
+    return result.map(s => s.setor).filter(Boolean) as string[];
+  } catch (e) {
+    console.error('getAvailableSetores error:', e);
+    return [];
   }
 }

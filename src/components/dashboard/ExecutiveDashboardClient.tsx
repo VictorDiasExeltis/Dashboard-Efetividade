@@ -4,6 +4,8 @@ import React from 'react';
 import { 
   BarChart, 
   Bar, 
+  LineChart,
+  Line,
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -11,7 +13,9 @@ import {
   Legend, 
   ResponsiveContainer,
   ReferenceLine,
-  LabelList
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import { 
   TrendingUp, 
@@ -37,9 +41,17 @@ interface ExecutiveDashboardProps {
       ciclo01: { cobertura: number; mdv: number };
       ciclo02: { cobertura: number; mdv: number };
       ciclo03: { cobertura: number; mdv: number };
-      selected: { cobertura: number; mdv: number };
+      selected: { 
+        cobertura: number; 
+        mdv: number;
+        visitasTotais: number;
+        contatos: number;
+      };
+      brasilSelected: {
+        cobertura: number;
+        mdv: number;
+      };
       previous: { cobertura: number; mdv: number } | null;
-      amostras?: string;
       diasRestantes?: number;
     };
     chartData: any[];
@@ -58,6 +70,35 @@ const CHART = {
   green: '#10b981',  // Ciclo 03
 };
 
+const COLORS = [
+  '#3b82f6', // blue-500
+  '#f97316', // orange-500
+  '#10b981', // emerald-500
+  '#ef4444', // red-500
+  '#8b5cf6', // violet-500
+  '#06b6d4', // cyan-500
+  '#f59e0b', // amber-500
+  '#ec4899', // pink-500
+  '#6366f1', // indigo-500
+  '#14b8a6', // teal-500
+];
+
+const mockAbonosData = [
+  { name: 'Motivo Saúde', value: 500, color: '#ef4444' }, // red-500
+  { name: 'Férias', value: 300, color: '#3b82f6' },       // blue-500
+  { name: 'Licença Mat/Pat', value: 150, color: '#10b981' },// emerald-500
+  { name: 'Outros', value: 50, color: '#f59e0b' }         // amber-500
+];
+
+const mockRepsData = [
+  { id: '1', nome: 'João Silva', setor: 'SP-01', distrito: 'São Paulo', diasTrabalhados: 20, diasAbonados: 2 },
+  { id: '2', nome: 'Maria Santos', setor: 'RJ-02', distrito: 'Rio de Janeiro', diasTrabalhados: 18, diasAbonados: 4 },
+  { id: '3', nome: 'Pedro Costa', setor: 'MG-01', distrito: 'Minas Gerais', diasTrabalhados: 22, diasAbonados: 0 },
+  { id: '4', nome: 'Ana Oliveira', setor: 'PR-03', distrito: 'Sul', diasTrabalhados: 15, diasAbonados: 7 },
+  { id: '5', nome: 'Lucas Lima', setor: 'BA-01', distrito: 'Nordeste', diasTrabalhados: 21, diasAbonados: 1 },
+  { id: '6', nome: 'Carlos Souza', setor: 'SP-02', distrito: 'São Paulo', diasTrabalhados: 22, diasAbonados: 0 },
+];
+
 export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashboardProps) {
   const [mounted, setMounted] = React.useState(false);
 
@@ -69,22 +110,44 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
 
   // Determinar quais ciclos devem ser exibidos nos gráficos
   const selectedParam = searchParams?.ciclo || 'Todos';
-  const allCycles = ['CICLO 01', 'CICLO 02', 'CICLO 03'];
+  const allCycles = ['CICLO 01', 'CICLO 02', 'CICLO 03', 'CICLO 04'];
   const activeCycles = selectedParam === 'Todos' ? allCycles : selectedParam.split(',');
 
-  const trendCobertura = kpis.previous ? kpis.selected.cobertura - kpis.previous.cobertura : 0;
-  const trendMDV = kpis.previous ? kpis.selected.mdv - kpis.previous.mdv : 0;
+  const districtNames = chartData.map(item => item.name);
+
+  const transformedChartData = activeCycles.map(cycleName => {
+    const keySuffix = cycleName.replace('CICLO ', '').trim();
+    const cobKey = `ciclo${keySuffix}`;
+    const mdvKey = `mdv${keySuffix}`;
+
+    const dataPoint: any = { name: cycleName };
+
+    chartData.forEach(item => {
+      dataPoint[`${item.name}_cob`] = item[cobKey];
+      dataPoint[`${item.name}_mdv`] = item[mdvKey];
+    });
+
+    return dataPoint;
+  });
+
+  const percentCobertura = kpis.brasilSelected?.cobertura > 0 
+    ? ((kpis.selected.cobertura - kpis.brasilSelected.cobertura) / kpis.brasilSelected.cobertura) * 100 
+    : 0;
+  
+  const percentMDV = kpis.brasilSelected?.mdv > 0 
+    ? ((kpis.selected.mdv - kpis.brasilSelected.mdv) / kpis.brasilSelected.mdv) * 100 
+    : 0;
 
   // Determinar o nome do ciclo para o título do KPI
   const lastSelectedCycle = activeCycles[activeCycles.length - 1];
 
   const kpiCards = [
     {
-      title: `% Cobertura (${lastSelectedCycle})`,
+      title: `Cobertura de Visitação`,
       value: `${Number(kpis.selected.cobertura).toFixed(1)}%`,
-      description: "Meta: 90%",
-      trend: kpis.previous ? `${trendCobertura >= 0 ? '+' : ''}${trendCobertura.toFixed(1)}%` : null,
-      trendType: trendCobertura >= 0 ? 'up' : 'down',
+      description: `Média Brasil: ${Number(kpis.brasilSelected?.cobertura || 0).toFixed(1)}%`,
+      trend: `${percentCobertura >= 0 ? '+' : ''}${percentCobertura.toFixed(1)}% vs BR`,
+      trendType: percentCobertura >= 0 ? 'up' : 'down',
       icon: TrendingUp,
       color: "text-blue-600",
       bg: "bg-blue-50"
@@ -92,30 +155,30 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
     {
       title: "MDV (Média Visita Diária)",
       value: Number(kpis.selected.mdv).toFixed(1),
-      description: "Meta: 12.0",
-      trend: kpis.previous ? `${trendMDV >= 0 ? '+' : ''}${trendMDV.toFixed(1)}` : null,
-      trendType: trendMDV >= 0 ? 'up' : 'down',
+      description: `Média Brasil: ${Number(kpis.brasilSelected?.mdv || 0).toFixed(1)}`,
+      trend: `${percentMDV >= 0 ? '+' : ''}${percentMDV.toFixed(1)}% vs BR`,
+      trendType: percentMDV >= 0 ? 'up' : 'down',
       icon: Users,
       color: "text-emerald-600",
       bg: "bg-emerald-50"
     },
     {
-      title: "Índice de Amostras",
-      value: (kpis as any).amostras || "3.2",
-      description: "Por visita realizada",
-      trend: "-0.4",
-      trendType: "down",
+      title: "Visitas Totais",
+      value: Number(kpis.selected.visitasTotais).toLocaleString('pt-BR'),
+      description: "Soma de todos os ciclos",
+      trend: null,
+      trendType: null,
       icon: Package,
       color: "text-amber-600",
       bg: "bg-amber-50"
     },
     {
-      title: "Dias Úteis Restantes",
-      value: (kpis as any).diasRestantes?.toString() || "8",
-      description: "Ciclo Março/2026",
+      title: "Contatos (Médicos)",
+      value: Number(kpis.selected.contatos).toLocaleString('pt-BR'),
+      description: "Visitas únicas no período",
       trend: null,
       trendType: null,
-      icon: Calendar,
+      icon: Users,
       color: "text-slate-600",
       bg: "bg-slate-100"
     }
@@ -140,7 +203,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       <div className="flex items-center gap-2 px-1 text-slate-500">
         <div className="h-1 w-1 rounded-full bg-slate-400" />
         <p className="text-[11px] font-medium uppercase tracking-wider">
-          Dados: {lastSelectedCycle} {kpis.previous && `vs Ciclo anterior`}
+          Dados: {selectedParam === 'Todos' ? 'Todos os Ciclos' : activeCycles.join(' + ')} {kpis.previous && selectedParam !== 'Todos' && `vs Ciclo anterior`}
         </p>
       </div>
 
@@ -184,13 +247,15 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
             <div className="h-[400px] w-full mt-4">
               {mounted && (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }} barGap={4}>
+                  <LineChart data={transformedChartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
                     <XAxis 
                       dataKey="name" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: CHART.tick, fontSize: 11 }} 
+                      tick={{ fill: CHART.tick, fontSize: 10, angle: -45, textAnchor: 'end' }}
+                      interval={0}
+                      height={80}
                       dy={10}
                       type="category"
                     />
@@ -198,49 +263,32 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: CHART.tick, fontSize: 11 }} 
-                      domain={[0, 105]} 
-                      ticks={[0, 25, 50, 75, 100]}
+                      domain={[50, 100]} 
+                      ticks={[50, 60, 70, 80, 90, 100]}
                       tickFormatter={(v: any) => `${v}%`} 
                     />
                     <Tooltip 
                       formatter={(value: any) => `${Number(value).toFixed(1)}%`}
+                      itemSorter={(item) => -(item.value as number)}
                       cursor={{ fill: CHART.tooltip.cursor }} 
                       contentStyle={{ borderRadius: '8px', backgroundColor: CHART.tooltip.bg, border: `1px solid ${CHART.tooltip.border}`, color: CHART.tooltip.color }} 
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }} />
                     <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'right', value: 'Meta', fill: '#ef4444', fontSize: 10 }} />
                     
-                    <Bar 
-                      name="Ciclo 01" 
-                      dataKey="ciclo01" 
-                      fill={CHART.blue} 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={20} 
-                      hide={!activeCycles.includes('CICLO 01')}
-                    >
-                      <LabelList dataKey="ciclo01" position="top" fill={CHART.blue} fontSize={10} fontWeight="bold" stroke="#ffffff" strokeWidth={4} style={{ paintOrder: 'stroke' }} formatter={(v: any) => `${v != null && v > 0 ? Number(v).toFixed(1) : ''}%`} />
-                    </Bar>
-                    <Bar 
-                      name="Ciclo 02" 
-                      dataKey="ciclo02" 
-                      fill={CHART.orange} 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={20} 
-                      hide={!activeCycles.includes('CICLO 02')}
-                    >
-                      <LabelList dataKey="ciclo02" position="top" fill={CHART.orange} fontSize={10} fontWeight="bold" stroke="#ffffff" strokeWidth={4} style={{ paintOrder: 'stroke' }} formatter={(v: any) => `${v != null && v > 0 ? Number(v).toFixed(1) : ''}%`} />
-                    </Bar>
-                    <Bar 
-                      name="Ciclo 03" 
-                      dataKey="ciclo03" 
-                      fill={CHART.green} 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={20} 
-                      hide={!activeCycles.includes('CICLO 03')}
-                    >
-                      <LabelList dataKey="ciclo03" position="top" fill={CHART.green} fontSize={10} fontWeight="bold" stroke="#ffffff" strokeWidth={4} style={{ paintOrder: 'stroke' }} formatter={(v: any) => `${v != null && v > 0 ? Number(v).toFixed(1) : ''}%`} />
-                    </Bar>
-                  </BarChart>
+                    {districtNames.map((district, index) => (
+                      <Line 
+                        key={district}
+                        type="monotone"
+                        name={district} 
+                        dataKey={`${district}_cob`} 
+                        stroke={COLORS[index % COLORS.length]} 
+                        strokeWidth={2}
+                        dot={{ r: 4, strokeWidth: 2 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    ))}
+                  </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
@@ -259,13 +307,15 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
             <div className="h-[400px] w-full mt-4">
               {mounted && (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }} barGap={4}>
+                  <LineChart data={transformedChartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
                     <XAxis 
                       dataKey="name" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: CHART.tick, fontSize: 11 }} 
+                      tick={{ fill: CHART.tick, fontSize: 10, angle: -45, textAnchor: 'end' }}
+                      interval={0}
+                      height={80}
                       dy={10}
                       type="category"
                     />
@@ -273,51 +323,118 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: CHART.tick, fontSize: 11 }} 
-                      domain={[0, (dataMax: number) => Math.max(15, Math.ceil(dataMax + 2))]} 
+                      domain={[7, 13]} 
                     />
                     <Tooltip 
                       formatter={(value: any) => Number(value).toFixed(1)}
+                      itemSorter={(item) => -(item.value as number)}
                       cursor={{ fill: CHART.tooltip.cursor }} 
                       contentStyle={{ borderRadius: '8px', backgroundColor: CHART.tooltip.bg, border: `1px solid ${CHART.tooltip.border}`, color: CHART.tooltip.color }} 
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }} />
+                    <ReferenceLine y={10.8} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'right', value: 'Meta', fill: '#ef4444', fontSize: 10 }} />
                     
-                    <Bar 
-                      name="MDV Ciclo 01" 
-                      dataKey="mdv01" 
-                      fill={CHART.blue} 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={20} 
-                      hide={!activeCycles.includes('CICLO 01')}
-                    >
-                      <LabelList dataKey="mdv01" position="top" fill={CHART.blue} fontSize={10} fontWeight="bold" stroke="#ffffff" strokeWidth={4} style={{ paintOrder: 'stroke' }} formatter={(v: any) => (v != null && v > 0 ? Number(v).toFixed(1) : '')} />
-                    </Bar>
-                    <Bar 
-                      name="MDV Ciclo 02" 
-                      dataKey="mdv02" 
-                      fill={CHART.orange} 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={20} 
-                      hide={!activeCycles.includes('CICLO 02')}
-                    >
-                      <LabelList dataKey="mdv02" position="top" fill={CHART.orange} fontSize={10} fontWeight="bold" stroke="#ffffff" strokeWidth={4} style={{ paintOrder: 'stroke' }} formatter={(v: any) => (v != null && v > 0 ? Number(v).toFixed(1) : '')} />
-                    </Bar>
-                    <Bar 
-                      name="MDV Ciclo 03" 
-                      dataKey="mdv03" 
-                      fill={CHART.green} 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={20} 
-                      hide={!activeCycles.includes('CICLO 03')}
-                    >
-                      <LabelList dataKey="mdv03" position="top" fill={CHART.green} fontSize={10} fontWeight="bold" stroke="#ffffff" strokeWidth={4} style={{ paintOrder: 'stroke' }} formatter={(v: any) => (v != null && v > 0 ? Number(v).toFixed(1) : '')} />
-                    </Bar>
-                  </BarChart>
+                    {districtNames.map((district, index) => (
+                      <Line 
+                        key={district}
+                        type="monotone"
+                        name={district} 
+                        dataKey={`${district}_mdv`} 
+                        stroke={COLORS[index % COLORS.length]} 
+                        strokeWidth={2}
+                        dot={{ r: 4, strokeWidth: 2 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    ))}
+                  </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
           </CardContent>
         </Card>
+
+        {/* Abonos Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Abonos Chart */}
+          <Card className="border-slate-200 bg-white shadow-sm lg:col-span-1">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-slate-900">
+                Motivos de Abono
+              </CardTitle>
+              <CardDescription className="text-slate-500">Motivos de ausência no período</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[350px] w-full mt-4 flex items-center justify-center">
+                {mounted && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={mockAbonosData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={80}
+                        outerRadius={120}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ value }) => value}
+                        labelLine={true}
+                      >
+                        {mockAbonosData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value: any) => [`${value} abonos`, 'Quantidade']}
+                        contentStyle={{ borderRadius: '8px', backgroundColor: CHART.tooltip.bg, border: `1px solid ${CHART.tooltip.border}`, color: CHART.tooltip.color }} 
+                      />
+                      <Legend verticalAlign="top" align="center" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Abonos Table */}
+          <Card className="border-slate-200 bg-white shadow-sm lg:col-span-2 flex flex-col overflow-hidden">
+            <CardHeader className="border-b border-slate-200 bg-slate-50/50 pb-4">
+              <CardTitle className="text-lg font-semibold text-slate-900">
+                Detalhamento por Representante
+              </CardTitle>
+              <CardDescription className="text-slate-500">
+                Dias trabalhados e abonados no período
+              </CardDescription>
+            </CardHeader>
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Nome</th>
+                    <th className="px-4 py-3 font-medium">Setor</th>
+                    <th className="px-4 py-3 font-medium">Distrito</th>
+                    <th className="px-4 py-3 font-medium text-center">Dias Trabalhados</th>
+                    <th className="px-4 py-3 font-medium text-center">Dias Abonados</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {mockRepsData.map((rep) => (
+                    <tr key={rep.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3 font-medium text-slate-900">{rep.nome}</td>
+                      <td className="px-4 py-3 text-slate-600">{rep.setor}</td>
+                      <td className="px-4 py-3 text-slate-600">{rep.distrito}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{rep.diasTrabalhados}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={rep.diasAbonados > 0 ? "text-amber-600 font-medium" : "text-slate-500"}>
+                          {rep.diasAbonados}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

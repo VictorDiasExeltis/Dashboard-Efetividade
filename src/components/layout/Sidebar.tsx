@@ -19,8 +19,8 @@ import { Input } from '@/src/components/ui/input';
 const navItems = [
   { name: 'Cobertura e MDV', path: '/visao-executiva', icon: LayoutDashboard },
   { name: 'Visitação x Segmentação', path: '/visitacao-x-segmentacao', icon: PieChart },
-  { name: 'Alocação de Recursos', path: '/dashboard/amostras', icon: BarChart3 },
-  { name: 'Target List', path: '/dashboard/target-list', icon: Target },
+  { name: 'Entrega de Amostras', path: '/alocacao-de-recursos', icon: BarChart3 },
+  { name: 'Médicos não Visitados', path: '/target-list', icon: Target },
 ];
 
 const bottomNavItems = [
