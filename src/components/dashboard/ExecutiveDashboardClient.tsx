@@ -189,7 +189,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Cobertura e MDV</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Cobertura e Medida de Visitação</h1>
           <p className="text-sm text-slate-500 mt-1">
             Resumo de performance operacional<br />e cobertura de mercado (Dados em Tempo Real).
           </p>

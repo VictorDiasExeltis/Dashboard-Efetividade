@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Layout } from "@/src/components/layout/Layout";
 
 export const metadata: Metadata = {
   title: "SFE Dashboard",
@@ -15,9 +14,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="light">
       <body className="antialiased font-sans">
-        <Layout>
-          {children}
-        </Layout>
+        {children}
       </body>
     </html>
   );
