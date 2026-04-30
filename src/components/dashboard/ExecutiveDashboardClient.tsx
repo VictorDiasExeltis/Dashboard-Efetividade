@@ -34,6 +34,8 @@ import {
 } from '@/src/components/ui/card';
 
 import { DashboardFilters } from './DashboardFilters';
+import { GraficoCobertura } from './GraficoCobertura';
+import { GraficoMDV } from './GraficoMDV';
 
 interface ExecutiveDashboardProps {
   data: {
@@ -60,29 +62,14 @@ interface ExecutiveDashboardProps {
   searchParams?: any;
 }
 
-// Cores fixas para light mode — sem dependência de tema
+// Estilos compartilhados para os gráficos internos
 const CHART = {
   grid: '#f1f5f9',
   tick: '#64748b',
   tooltip: { bg: '#ffffff', border: '#e2e8f0', color: '#0f172a', cursor: '#f8fafc' },
-  blue: '#3b82f6',   // Ciclo 01
-  orange: '#f97316', // Ciclo 02
-  green: '#10b981',  // Ciclo 03
 };
 
-const COLORS = [
-  '#3b82f6', // blue-500
-  '#f97316', // orange-500
-  '#10b981', // emerald-500
-  '#ef4444', // red-500
-  '#8b5cf6', // violet-500
-  '#06b6d4', // cyan-500
-  '#f59e0b', // amber-500
-  '#ec4899', // pink-500
-  '#6366f1', // indigo-500
-  '#14b8a6', // teal-500
-];
-
+// Dados Mock para componentes que ainda serão desenvolvidos
 const mockAbonosData = [
   { name: 'Motivo Saúde', value: 500, color: '#ef4444' }, // red-500
   { name: 'Férias', value: 300, color: '#3b82f6' },       // blue-500
@@ -106,48 +93,15 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
     setMounted(true);
   }, []);
 
-  const { kpis, chartData } = data;
-
-  // Determinar quais ciclos devem ser exibidos nos gráficos
-  const selectedParam = searchParams?.ciclo || 'Todos';
-  const allCycles = ['CICLO 01', 'CICLO 02', 'CICLO 03', 'CICLO 04'];
-  const activeCycles = selectedParam === 'Todos' ? allCycles : selectedParam.split(',');
-
-  const districtNames = chartData.map(item => item.name);
-
-  const transformedChartData = activeCycles.map(cycleName => {
-    const keySuffix = cycleName.replace('CICLO ', '').trim();
-    const cobKey = `ciclo${keySuffix}`;
-    const mdvKey = `mdv${keySuffix}`;
-
-    const dataPoint: any = { name: cycleName };
-
-    chartData.forEach(item => {
-      dataPoint[`${item.name}_cob`] = item[cobKey];
-      dataPoint[`${item.name}_mdv`] = item[mdvKey];
-    });
-
-    return dataPoint;
-  });
-
-  const percentCobertura = kpis.brasilSelected?.cobertura > 0 
-    ? ((kpis.selected.cobertura - kpis.brasilSelected.cobertura) / kpis.brasilSelected.cobertura) * 100 
-    : 0;
-  
-  const percentMDV = kpis.brasilSelected?.mdv > 0 
-    ? ((kpis.selected.mdv - kpis.brasilSelected.mdv) / kpis.brasilSelected.mdv) * 100 
-    : 0;
-
-  // Determinar o nome do ciclo para o título do KPI
-  const lastSelectedCycle = activeCycles[activeCycles.length - 1];
-
+  const { kpis } = data;
+ 
   const kpiCards = [
     {
       title: `Cobertura de Visitação`,
       value: `${Number(kpis.selected.cobertura).toFixed(1)}%`,
       description: `Média Brasil: ${Number(kpis.brasilSelected?.cobertura || 0).toFixed(1)}%`,
-      trend: `${percentCobertura >= 0 ? '+' : ''}${percentCobertura.toFixed(1)}% vs BR`,
-      trendType: percentCobertura >= 0 ? 'up' : 'down',
+      trend: `${kpis.trend?.cobertura >= 0 ? '+' : ''}${Number(kpis.trend?.cobertura || 0).toFixed(1)} pp vs ciclo anterior`,
+      trendType: (kpis.trend?.cobertura || 0) >= 0 ? 'up' : 'down',
       icon: TrendingUp,
       color: "text-blue-600",
       bg: "bg-blue-50"
@@ -156,8 +110,8 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       title: "MDV (Média Visita Diária)",
       value: Number(kpis.selected.mdv).toFixed(1),
       description: `Média Brasil: ${Number(kpis.brasilSelected?.mdv || 0).toFixed(1)}`,
-      trend: `${percentMDV >= 0 ? '+' : ''}${percentMDV.toFixed(1)}% vs BR`,
-      trendType: percentMDV >= 0 ? 'up' : 'down',
+      trend: `${kpis.trend?.mdv >= 0 ? '+' : ''}${Number(kpis.trend?.mdv || 0).toFixed(1)} vs ciclo anterior`,
+      trendType: (kpis.trend?.mdv || 0) >= 0 ? 'up' : 'down',
       icon: Users,
       color: "text-emerald-600",
       bg: "bg-emerald-50"
@@ -203,7 +157,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       <div className="flex items-center gap-2 px-1 text-slate-500">
         <div className="h-1 w-1 rounded-full bg-slate-400" />
         <p className="text-[11px] font-medium uppercase tracking-wider">
-          Dados: {selectedParam === 'Todos' ? 'Todos os Ciclos' : activeCycles.join(' + ')} {kpis.previous && selectedParam !== 'Todos' && `vs Ciclo anterior`}
+          Dados: Todos os Ciclos
         </p>
       </div>
 
@@ -235,123 +189,8 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-8">
-        {/* Cobertura Chart */}
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-slate-900">
-              Cobertura por {searchParams?.estrutura || 'Distrito'} (%)
-            </CardTitle>
-            <CardDescription className="text-slate-500">Comparativo entre os Ciclos Selecionados</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[400px] w-full mt-4">
-              {mounted && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={transformedChartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: CHART.tick, fontSize: 10, angle: -45, textAnchor: 'end' }}
-                      interval={0}
-                      height={80}
-                      dy={10}
-                      type="category"
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: CHART.tick, fontSize: 11 }} 
-                      domain={[50, 100]} 
-                      ticks={[50, 60, 70, 80, 90, 100]}
-                      tickFormatter={(v: any) => `${v}%`} 
-                    />
-                    <Tooltip 
-                      formatter={(value: any) => `${Number(value).toFixed(1)}%`}
-                      itemSorter={(item) => -(item.value as number)}
-                      cursor={{ fill: CHART.tooltip.cursor }} 
-                      contentStyle={{ borderRadius: '8px', backgroundColor: CHART.tooltip.bg, border: `1px solid ${CHART.tooltip.border}`, color: CHART.tooltip.color }} 
-                    />
-                    <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }} />
-                    <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'right', value: 'Meta', fill: '#ef4444', fontSize: 10 }} />
-                    
-                    {districtNames.map((district, index) => (
-                      <Line 
-                        key={district}
-                        type="monotone"
-                        name={district} 
-                        dataKey={`${district}_cob`} 
-                        stroke={COLORS[index % COLORS.length]} 
-                        strokeWidth={2}
-                        dot={{ r: 4, strokeWidth: 2 }}
-                        activeDot={{ r: 6 }}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* MDV Chart */}
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-slate-900">
-              MDV por {searchParams?.estrutura || 'Distrito'}
-            </CardTitle>
-            <CardDescription className="text-slate-500">Média de Visita Diária por Ciclo</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[400px] w-full mt-4">
-              {mounted && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={transformedChartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: CHART.tick, fontSize: 10, angle: -45, textAnchor: 'end' }}
-                      interval={0}
-                      height={80}
-                      dy={10}
-                      type="category"
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: CHART.tick, fontSize: 11 }} 
-                      domain={[7, 13]} 
-                    />
-                    <Tooltip 
-                      formatter={(value: any) => Number(value).toFixed(1)}
-                      itemSorter={(item) => -(item.value as number)}
-                      cursor={{ fill: CHART.tooltip.cursor }} 
-                      contentStyle={{ borderRadius: '8px', backgroundColor: CHART.tooltip.bg, border: `1px solid ${CHART.tooltip.border}`, color: CHART.tooltip.color }} 
-                    />
-                    <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }} />
-                    <ReferenceLine y={10.8} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'right', value: 'Meta', fill: '#ef4444', fontSize: 10 }} />
-                    
-                    {districtNames.map((district, index) => (
-                      <Line 
-                        key={district}
-                        type="monotone"
-                        name={district} 
-                        dataKey={`${district}_mdv`} 
-                        stroke={COLORS[index % COLORS.length]} 
-                        strokeWidth={2}
-                        dot={{ r: 4, strokeWidth: 2 }}
-                        activeDot={{ r: 6 }}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <GraficoCobertura />
+        <GraficoMDV />
 
         {/* Abonos Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

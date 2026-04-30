@@ -12,19 +12,41 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
+    let mounted = true;
+
+    // DESATIVADO TEMPORARIAMENTE
     const checkAuth = async () => {
-      // O getSession() é responsável por extrair o token da URL 
-      // (hash fragment) e estabelecer a sessão no navegador.
+      /*
+      const hasHashToken = window.location.hash.includes("access_token") || 
+                           window.location.hash.includes("error");
+
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
         router.push("/visao-executiva");
-      } else {
+      } else if (!hasHashToken && mounted) {
         router.push("/login");
       }
+      */
+      
+      // Força o acesso direto
+      router.push("/visao-executiva");
     };
     
     checkAuth();
+
+    /*
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        router.push("/visao-executiva");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+    */
   }, [router]);
 
   // Enquanto decide para onde redirecionar (Dashboard ou Login),

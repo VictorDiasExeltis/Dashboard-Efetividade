@@ -19,10 +19,15 @@ export default function LoginPage() {
   useEffect(() => {
     // 1. Checa se o usuário já tem uma sessão ativa ao montar a página
     const checkSession = async () => {
+      const hasHashToken = window.location.hash.includes("access_token") || 
+                           window.location.hash.includes("error");
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.push("/dashboard");
-      } else {
+        router.push("/visao-executiva");
+      } else if (!hasHashToken) {
+        // Só removemos o loading (exibindo o form) se não tiver token pra processar.
+        // Se tiver, mantemos o loading enquanto o Supabase faz o login em background.
         setLoading(false);
       }
     };
@@ -33,7 +38,7 @@ export default function LoginPage() {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_IN" && session) {
-          router.push("/dashboard");
+          router.push("/visao-executiva");
         }
       }
     );

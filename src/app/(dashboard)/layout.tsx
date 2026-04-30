@@ -19,6 +19,8 @@ export default function DashboardLayout({
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
+    // DESATIVADO TEMPORARIAMENTE A PEDIDO DO USUÁRIO PARA ACESSO DIRETO
+    /*
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -44,6 +46,11 @@ export default function DashboardLayout({
     return () => {
       authListener.subscription.unsubscribe();
     };
+    */
+    
+    // Forçando a autenticação para liberar o acesso ao dashboard
+    setAuthenticated(true);
+    setLoading(false);
   }, [router]);
 
   // Enquanto verifica o estado da autenticação, mostra um loader
