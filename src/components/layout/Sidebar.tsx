@@ -17,7 +17,7 @@ import { cn } from '@/src/lib/utils';
 import { Input } from '@/src/components/ui/input';
 
 const navItems = [
-  { name: 'Cobertura e Medida de Visitação', path: '/visao-executiva', icon: LayoutDashboard },
+  { name: 'Cobertura e Média de Visitação', path: '/visao-executiva', icon: LayoutDashboard },
   { name: 'Visitação x Segmentação', path: '/visitacao-x-segmentacao', icon: PieChart },
   { name: 'Entrega de Amostras', path: '/alocacao-de-recursos', icon: BarChart3 },
   { name: 'Médicos não Visitados', path: '/target-list', icon: Target },

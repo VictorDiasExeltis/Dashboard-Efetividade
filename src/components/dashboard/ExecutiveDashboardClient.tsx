@@ -2,26 +2,9 @@
 
 import React from 'react';
 import { 
-  BarChart, 
-  Bar, 
-  LineChart,
-  Line,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer,
-  ReferenceLine,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
-import { 
   TrendingUp, 
   Users, 
-  Package, 
-  Calendar,
+  Package,
   ArrowUpRight,
   ArrowDownRight
 } from 'lucide-react';
@@ -36,6 +19,7 @@ import {
 import { DashboardFilters } from './DashboardFilters';
 import { GraficoCobertura } from './GraficoCobertura';
 import { GraficoMDV } from './GraficoMDV';
+import { GraficoAbonos } from './GraficoAbonos';
 
 interface ExecutiveDashboardProps {
   data: {
@@ -62,20 +46,7 @@ interface ExecutiveDashboardProps {
   searchParams?: any;
 }
 
-// Estilos compartilhados para os gráficos internos
-const CHART = {
-  grid: '#f1f5f9',
-  tick: '#64748b',
-  tooltip: { bg: '#ffffff', border: '#e2e8f0', color: '#0f172a', cursor: '#f8fafc' },
-};
-
 // Dados Mock para componentes que ainda serão desenvolvidos
-const mockAbonosData = [
-  { name: 'Motivo Saúde', value: 500, color: '#ef4444' }, // red-500
-  { name: 'Férias', value: 300, color: '#3b82f6' },       // blue-500
-  { name: 'Licença Mat/Pat', value: 150, color: '#10b981' },// emerald-500
-  { name: 'Outros', value: 50, color: '#f59e0b' }         // amber-500
-];
 
 const mockRepsData = [
   { id: '1', nome: 'João Silva', setor: 'SP-01', distrito: 'São Paulo', diasTrabalhados: 20, diasAbonados: 2 },
@@ -87,12 +58,6 @@ const mockRepsData = [
 ];
 
 export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashboardProps) {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const { kpis } = data;
  
   const kpiCards = [
@@ -143,7 +108,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Cobertura e Medida de Visitação</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Cobertura e Média de Visitação</h1>
           <p className="text-sm text-slate-500 mt-1">
             Resumo de performance operacional<br />e cobertura de mercado (Dados em Tempo Real).
           </p>
@@ -194,45 +159,8 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
 
         {/* Abonos Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Abonos Chart */}
-          <Card className="border-slate-200 bg-white shadow-sm lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-slate-900">
-                Motivos de Abono
-              </CardTitle>
-              <CardDescription className="text-slate-500">Motivos de ausência no período</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[350px] w-full mt-4 flex items-center justify-center">
-                {mounted && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={mockAbonosData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={80}
-                        outerRadius={120}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ value }) => value}
-                        labelLine={true}
-                      >
-                        {mockAbonosData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        formatter={(value: any) => [`${value} abonos`, 'Quantidade']}
-                        contentStyle={{ borderRadius: '8px', backgroundColor: CHART.tooltip.bg, border: `1px solid ${CHART.tooltip.border}`, color: CHART.tooltip.color }} 
-                      />
-                      <Legend verticalAlign="top" align="center" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Abonos Chart — dados reais do Supabase */}
+          <GraficoAbonos />
 
           {/* Abonos Table */}
           <Card className="border-slate-200 bg-white shadow-sm lg:col-span-2 flex flex-col overflow-hidden">
