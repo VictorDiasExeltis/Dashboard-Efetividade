@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Input } from '@/src/components/ui/input';
+import { getSupabaseClient } from '@/src/lib/supabase/client';
 
 const navItems = [
   { name: 'Cobertura e Média de Visitação', path: '/visao-executiva', icon: LayoutDashboard },
@@ -133,12 +134,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="mt-4 px-3">
             <button
               onClick={async () => {
-                const { createClient } = await import('@supabase/supabase-js');
-                const supabase = createClient(
-                  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-                  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-                );
-                await supabase.auth.signOut();
+                await getSupabaseClient().auth.signOut();
                 window.location.href = '/login';
               }}
               className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"

@@ -2,24 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
-
-// Inicializa o cliente do Supabase
-// Certifique-se de que estas variáveis estejam no seu .env.local
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { getSupabaseClient } from "@/src/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const supabase = getSupabaseClient();
 
   useEffect(() => {
     // 1. Checa se o usuário já tem uma sessão ativa ao montar a página
     const checkSession = async () => {
-      const hasHashToken = window.location.hash.includes("access_token") || 
+      const hasHashToken = window.location.hash.includes("access_token") ||
                            window.location.hash.includes("error");
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -31,7 +26,7 @@ export default function LoginPage() {
         setLoading(false);
       }
     };
-    
+
     checkSession();
 
     // 2. Ouve as mudanças de estado na autenticação

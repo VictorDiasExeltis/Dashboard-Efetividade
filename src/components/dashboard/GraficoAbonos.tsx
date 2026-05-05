@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient } from '@/src/lib/supabase/client';
 import { Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import {
   Card,
@@ -43,12 +43,6 @@ const TOOLTIP_STYLE = {
   border: '#e2e8f0',
   color: '#0f172a',
 };
-
-// ─── Supabase Client ─────────────────────────────────────────
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ─── Custom Label ────────────────────────────────────────────
 
@@ -181,7 +175,7 @@ export function GraficoAbonos() {
       setError(null);
 
       // Buscar todos os registros de fato_abonos
-      const { data, error: err } = await supabase
+      const { data, error: err } = await getSupabaseClient()
         .from('fato_abonos')
         .select('motivo, horas_abonadas');
 

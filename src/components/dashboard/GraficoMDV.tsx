@@ -13,7 +13,7 @@ import {
   Legend,
   ReferenceLine,
 } from 'recharts';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient } from '@/src/lib/supabase/client';
 import { Users, AlertTriangle, Loader2, Info } from 'lucide-react';
 import {
   Card,
@@ -68,12 +68,6 @@ const LINE_COLORS = [
   '#0ea5e9', // sky-500
 ];
  
-// ─── Supabase Client ─────────────────────────────────────────
- 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
- 
 // ─── Helpers ─────────────────────────────────────────────────
  
 function formatarCicloLabel(ciclo: string): string {
@@ -114,7 +108,7 @@ export function GraficoMDV() {
       setError(null);
  
       // 1. Buscar dados dinâmicos via RPC (agora MDV)
-      const { data, error: err } = await supabase
+      const { data, error: err } = await getSupabaseClient()
         .rpc('get_mdv_dinamico', {
           p_estrutura: estrutura,
           p_distrito_filtro: distritoFiltro === 'Todos' ? null : distritoFiltro

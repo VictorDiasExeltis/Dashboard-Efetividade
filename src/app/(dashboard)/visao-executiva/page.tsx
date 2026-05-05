@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { AlertTriangle } from 'lucide-react';
 import { getExecutiveMetrics } from '@/src/app/actions';
 import { ExecutiveDashboardClient } from '@/src/components/dashboard/ExecutiveDashboardClient';
 
@@ -50,6 +51,7 @@ export default function ExecutiveDashboard() {
   const searchParams = useSearchParams();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const ciclo     = searchParams.get('ciclo')     || 'Todos';
   const estrutura = searchParams.get('estrutura') || 'Distrito';
@@ -59,11 +61,13 @@ export default function ExecutiveDashboard() {
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    setFetchError(null);
     try {
       const result = await getExecutiveMetrics(ciclo, distrito, estrutura, setor);
       setData(result);
     } catch (err) {
       console.error('Erro ao buscar métricas:', err);
+      setFetchError('Não foi possível carregar os dados do dashboard. Verifique a conexão e tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +84,29 @@ export default function ExecutiveDashboard() {
     distrito,
   };
 
-  if (isLoading || !data) {
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
+
+  if (fetchError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="bg-white border border-red-200 rounded-xl p-8 max-w-md w-full text-center shadow-sm">
+          <AlertTriangle className="h-10 w-10 text-red-400 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Falha ao carregar o dashboard</h2>
+          <p className="text-sm text-slate-500 mb-6">{fetchError}</p>
+          <button
+            onClick={fetchData}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
     return <DashboardSkeleton />;
   }
 
