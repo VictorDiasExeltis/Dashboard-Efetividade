@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Select,
@@ -9,34 +9,75 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/src/components/ui/select';
+import {
+  getClassificacoes,
+  getSetoresPorDistrito,
+  getDistritos,
+  getCiclos,
+} from '@/src/app/actions';
 
-const CLASSIFICACOES   = ['A', 'B', 'C', 'Todas'];
-const ESTRUTURAS       = ['Distrito', 'Setor'];
-const DISTRITOS_ALL    = ['Todos', 'MG/CO', 'SP/PR', 'NORDESTE', 'RS/SC', 'RJ/ES', 'NORTE', 'SP/MT/MS', 'SPI'];
-const DISTRITOS_SETOR  = ['MG/CO', 'SP/PR', 'NORDESTE', 'RS/SC', 'RJ/ES', 'NORTE', 'SP/MT/MS', 'SPI'];
-const ESTADOS          = ['Todos', 'SP', 'MG', 'RJ', 'PR', 'RS', 'SC', 'BA']; // Exemplos
-const MUNICIPIOS       = ['Todos', 'São Paulo', 'Belo Horizonte', 'Rio de Janeiro', 'Curitiba', 'Porto Alegre']; // Exemplos
+const ESTRUTURAS = ['Distrito', 'Setor'];
 
-interface SegmentacaoFiltersProps {
-  availableSetores?: string[];
+const TRIGGER_BASE = 'h-8 text-[11px] lg:text-sm bg-white border-slate-200 shadow-sm transition-colors';
+
+// "202605" → "Ciclo 05"
+function formatCiclo(ciclo: string): string {
+  return `Ciclo ${ciclo.slice(-2)}`;
 }
 
-export function SegmentacaoFilters({ availableSetores = [] }: SegmentacaoFiltersProps) {
+export function SegmentacaoFilters() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
+  // ─── Dados dinâmicos (fonte: banco) ─────────────────────────
+  const [classificacoes,      setClassificacoes]      = useState<string[]>([]);
+  const [setoresDisponiveis,  setSetoresDisponiveis]  = useState<string[]>([]);
+  const [distritos,           setDistritos]           = useState<string[]>([]);
+  const [ciclos,              setCiclos]              = useState<string[]>([]);
+  const [loadingSetores,      setLoadingSetores]      = useState(false);
+
+  useEffect(() => {
+    getClassificacoes().then(setClassificacoes);
+    getDistritos().then(setDistritos);
+    getCiclos().then(setCiclos);
+  }, []);
+
+  // Último ciclo disponível serve como default quando a URL não traz nenhum
+  const ultimoCiclo = useMemo(
+    () => (ciclos.length ? ciclos[ciclos.length - 1] : ''),
+    [ciclos],
+  );
+
+  const currentCiclo         = searchParams.get('ciclo')         || ultimoCiclo;
   const currentClassificacao = searchParams.get('classificacao') || 'Todas';
   const currentEstrutura     = searchParams.get('estrutura')     || 'Distrito';
   const currentDistritoRaw   = searchParams.get('distrito')      || 'Todos';
   const currentSetor         = searchParams.get('setor')         || 'Todos';
-  const currentEstado        = searchParams.get('estado')        || 'Todos';
-  const currentMunicipio     = searchParams.get('municipio')     || 'Todos';
 
-  const isSetorMode = currentEstrutura === 'Setor';
-
+  const isSetorMode     = currentEstrutura === 'Setor';
+  // Quando entra em modo Setor, força um distrito específico (primeiro
+  // disponível) já que setor só faz sentido no contexto de um distrito.
+  const distritoPadraoSetor = distritos[0] ?? 'Todos';
   const currentDistrito = isSetorMode && currentDistritoRaw === 'Todos'
-    ? 'MG/CO'
+    ? distritoPadraoSetor
     : currentDistritoRaw;
+
+  const distritoOptions = isSetorMode
+    ? distritos                              // setor exige distrito específico
+    : ['Todos', ...distritos];
+
+  useEffect(() => {
+    if (!isSetorMode) {
+      setSetoresDisponiveis([]);
+      return;
+    }
+    setLoadingSetores(true);
+    getSetoresPorDistrito(currentDistrito)
+      .then(setSetoresDisponiveis)
+      .finally(() => setLoadingSetores(false));
+  }, [isSetorMode, currentDistrito]);
+
+  // ─── Handlers ─────────────────────────────────────────────
 
   const updateParam = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -52,64 +93,52 @@ export function SegmentacaoFilters({ availableSetores = [] }: SegmentacaoFilters
     const params = new URLSearchParams(searchParams.toString());
     params.set('estrutura', value);
     params.delete('setor');
-    if (value === 'Setor' && currentDistritoRaw === 'Todos') {
-      params.set('distrito', 'MG/CO');
+    if (value === 'Setor') {
+      if (currentDistritoRaw === 'Todos' && distritoPadraoSetor !== 'Todos') {
+        params.set('distrito', distritoPadraoSetor);
+      }
+    } else {
+      params.delete('distrito');
     }
     router.push(`?${params.toString()}`);
   };
 
-  const distritoOptions = isSetorMode ? DISTRITOS_SETOR : DISTRITOS_ALL;
-
-  const triggerBase = 'h-8 text-[11px] lg:text-sm bg-white border-slate-200 shadow-sm transition-colors';
+  // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-4 p-3 bg-white border border-slate-200 rounded-xl shadow-sm w-full">
+    <div className="flex flex-row items-center gap-2 w-full">
+
+      {/* Ciclo */}
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Ciclo</label>
+        <Select value={currentCiclo} onValueChange={(v) => updateParam('ciclo', v)} disabled={!ciclos.length}>
+          <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
+            <SelectValue placeholder={ciclos.length ? undefined : 'Carregando...'} />
+          </SelectTrigger>
+          <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
+            {ciclos.map((c) => (
+              <SelectItem key={c} value={c} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
+                {formatCiclo(c)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Classificação */}
       <div className="flex flex-col gap-1">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Classificação</label>
         <Select value={currentClassificacao} onValueChange={(v) => updateParam('classificacao', v)}>
-          <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
+          <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
-            {CLASSIFICACOES.map((c) => (
+            <SelectItem value="Todas" className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
+              Todas
+            </SelectItem>
+            {classificacoes.map((c) => (
               <SelectItem key={c} value={c} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
                 {c}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Estado */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Estado</label>
-        <Select value={currentEstado} onValueChange={(v) => updateParam('estado', v)}>
-          <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
-            {ESTADOS.map((e) => (
-              <SelectItem key={e} value={e} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-                {e}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Município */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Município</label>
-        <Select value={currentMunicipio} onValueChange={(v) => updateParam('municipio', v)}>
-          <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
-            {MUNICIPIOS.map((m) => (
-              <SelectItem key={m} value={m} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-                {m}
               </SelectItem>
             ))}
           </SelectContent>
@@ -120,7 +149,7 @@ export function SegmentacaoFilters({ availableSetores = [] }: SegmentacaoFilters
       <div className="flex flex-col gap-1">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Estrutura</label>
         <Select value={currentEstrutura} onValueChange={handleEstrutura}>
-          <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
+          <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
@@ -138,9 +167,9 @@ export function SegmentacaoFilters({ availableSetores = [] }: SegmentacaoFilters
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
           Distrito{isSetorMode && <span className="ml-1 text-blue-500">*</span>}
         </label>
-        <Select value={currentDistrito} onValueChange={(v) => updateParam('distrito', v)}>
-          <SelectTrigger className={`${triggerBase} ${isSetorMode ? 'border-blue-200 ring-1 ring-blue-100' : 'hover:border-slate-300'}`}>
-            <SelectValue />
+        <Select value={currentDistrito} onValueChange={(v) => updateParam('distrito', v)} disabled={!distritos.length}>
+          <SelectTrigger className={`${TRIGGER_BASE} ${isSetorMode ? 'border-blue-200 ring-1 ring-blue-100' : 'hover:border-slate-300'}`}>
+            <SelectValue placeholder={distritos.length ? undefined : 'Carregando...'} />
           </SelectTrigger>
           <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
             {distritoOptions.map((d) => (
@@ -157,21 +186,19 @@ export function SegmentacaoFilters({ availableSetores = [] }: SegmentacaoFilters
         <label className={`text-[10px] font-semibold uppercase tracking-wide ${isSetorMode ? 'text-slate-500' : 'text-slate-300'}`}>
           Setor
         </label>
-        <Select value={currentSetor} onValueChange={(v) => updateParam('setor', v)} disabled={!isSetorMode}>
-          <SelectTrigger className={`${triggerBase} ${isSetorMode ? 'hover:border-slate-300' : 'opacity-40 cursor-not-allowed'}`}>
-            <SelectValue placeholder={isSetorMode ? 'Todos' : '—'} />
+        <Select value={currentSetor} onValueChange={(v) => updateParam('setor', v)} disabled={!isSetorMode || loadingSetores}>
+          <SelectTrigger className={`${TRIGGER_BASE} ${isSetorMode && !loadingSetores ? 'hover:border-slate-300' : 'opacity-40 cursor-not-allowed'}`}>
+            <SelectValue placeholder={
+              !isSetorMode ? '—' : loadingSetores ? 'Carregando...' : 'Todos'
+            } />
           </SelectTrigger>
           <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
             <SelectItem value="Todos" className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
               Todos
             </SelectItem>
-            {availableSetores.map((s) => (
-              <SelectItem
-                key={String(s)}
-                value={String(s)}
-                className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700"
-              >
-                {String(s)}
+            {setoresDisponiveis.map((s) => (
+              <SelectItem key={s} value={s} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
+                {s}
               </SelectItem>
             ))}
           </SelectContent>

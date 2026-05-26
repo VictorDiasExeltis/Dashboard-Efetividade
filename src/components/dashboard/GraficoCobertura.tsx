@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  LabelList,
 } from 'recharts';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
 import { TrendingUp, AlertTriangle, Loader2, Info } from 'lucide-react';
@@ -74,11 +75,44 @@ function formatarCicloLabel(ciclo: string): string {
   const num = parseInt(ciclo.slice(-2), 10);
   return `Ciclo ${String(num).padStart(2, '0')}`;
 }
+
+const CustomLineLabel = (props: any) => {
+  const { x, y, value, stroke } = props;
+  if (value === undefined || value === null) return null;
+  const formattedValue = `${Number(value).toFixed(1)}%`;
+  const width = 36;
+  const height = 18;
+  return (
+    <g>
+      <rect
+        x={x - width / 2}
+        y={y - height - 6}
+        width={width}
+        height={height}
+        rx={3}
+        ry={3}
+        fill={stroke || "#3b82f6"}
+      />
+      <text
+        x={x}
+        y={y - height / 2 - 6}
+        fill="#ffffff"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={10}
+        fontWeight="bold"
+      >
+        {formattedValue}
+      </text>
+    </g>
+  );
+};
  
 // ─── Componente Principal ────────────────────────────────────
  
 export function GraficoCobertura() {
   const searchParams = useSearchParams();
+  const [showLabels, setShowLabels] = useState(false);
   
   const [dados, setDados] = useState<DadosGrafico[]>([]);
   const [series, setSeries] = useState<string[]>([]);
@@ -249,15 +283,35 @@ export function GraficoCobertura() {
   return (
     <Card className="border-slate-200 bg-white shadow-sm">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-600" />
               Cobertura por {estrutura} (%)
             </CardTitle>
             <CardDescription className="text-slate-500 mt-1">
               Evolução da cobertura de médicos visitados por {estrutura.toLowerCase()} ao longo dos ciclos
               {distritoFiltro && distritoFiltro !== 'Todos' && ` em ${distritoFiltro}`}
             </CardDescription>
+          </div>
+
+          {/* Toggle Switch */}
+          <div className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100/85 transition-colors px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm shrink-0 select-none">
+            <span className="text-xs font-semibold text-slate-600">Rótulos</span>
+            <button
+              onClick={() => setShowLabels(!showLabels)}
+              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                showLabels ? "bg-blue-600" : "bg-slate-200"
+              }`}
+              role="switch"
+              aria-checked={showLabels}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  showLabels ? "translate-x-3" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
         </div>
       </CardHeader>
@@ -289,7 +343,7 @@ export function GraficoCobertura() {
                     border: `1px solid ${CHART_COLORS.tooltip.border}`,
                   }}
                   itemSorter={(item) => -(item.value as number)}
-                  formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
+                  formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
                 />
                 <Legend
                   verticalAlign="top"
@@ -320,7 +374,14 @@ export function GraficoCobertura() {
                     strokeWidth={3}
                     dot={{ r: 4, strokeWidth: 2 }}
                     activeDot={{ r: 6 }}
-                  />
+                  >
+                    {showLabels && (
+                      <LabelList
+                        dataKey={label}
+                        content={<CustomLineLabel stroke={LINE_COLORS[index % LINE_COLORS.length]} />}
+                      />
+                    )}
+                  </Line>
                 ))}
               </LineChart>
             </ResponsiveContainer>

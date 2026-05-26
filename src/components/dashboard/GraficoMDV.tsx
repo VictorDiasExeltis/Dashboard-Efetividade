@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  LabelList,
 } from 'recharts';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
 import { Users, AlertTriangle, Loader2, Info } from 'lucide-react';
@@ -52,7 +53,7 @@ const CHART_COLORS = {
 };
  
 const LINE_COLORS = [
-  '#10b981', // emerald-500 (verde para MDV)
+  '#10b981', // emerald-500 (verde para MVD)
   '#3b82f6', // blue-500
   '#f97316', // orange-500
   '#8b5cf6', // violet-500
@@ -74,11 +75,44 @@ function formatarCicloLabel(ciclo: string): string {
   const num = parseInt(ciclo.slice(-2), 10);
   return `Ciclo ${String(num).padStart(2, '0')}`;
 }
+
+const CustomLineLabel = (props: any) => {
+  const { x, y, value, stroke } = props;
+  if (value === undefined || value === null) return null;
+  const formattedValue = Number(value).toFixed(1);
+  const width = 34;
+  const height = 18;
+  return (
+    <g>
+      <rect
+        x={x - width / 2}
+        y={y - height - 6}
+        width={width}
+        height={height}
+        rx={3}
+        ry={3}
+        fill={stroke || "#3b82f6"}
+      />
+      <text
+        x={x}
+        y={y - height / 2 - 6}
+        fill="#ffffff"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={10}
+        fontWeight="bold"
+      >
+        {formattedValue}
+      </text>
+    </g>
+  );
+};
  
 // ─── Componente Principal ────────────────────────────────────
  
 export function GraficoMDV() {
   const searchParams = useSearchParams();
+  const [showLabels, setShowLabels] = useState(false);
   
   const [dados, setDados] = useState<DadosGrafico[]>([]);
   const [series, setSeries] = useState<string[]>([]);
@@ -171,7 +205,7 @@ export function GraficoMDV() {
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Users className="h-5 w-5 text-emerald-600" />
-            MDV por {estrutura}
+            MVD por {estrutura}
           </CardTitle>
           <CardDescription className="text-slate-500">
             Carregando média de visitas diárias...
@@ -195,7 +229,7 @@ export function GraficoMDV() {
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-red-500" />
-            MDV por {estrutura}
+            MVD por {estrutura}
           </CardTitle>
           <CardDescription className="text-red-500">Não foi possível carregar os dados</CardDescription>
         </CardHeader>
@@ -223,10 +257,10 @@ export function GraficoMDV() {
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Info className="h-5 w-5 text-emerald-500" />
-            MDV por Setor
+            MVD por Setor
           </CardTitle>
           <CardDescription className="text-slate-500">
-            Selecione um distrito específico para visualizar o MDV por setor.
+            Selecione um distrito específico para visualizar o MVD por setor.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -236,7 +270,7 @@ export function GraficoMDV() {
             </div>
             <h3 className="text-sm font-semibold text-slate-900">Distrito não selecionado</h3>
             <p className="text-xs text-slate-500 mt-1 max-w-[240px]">
-              Utilize o filtro de "Distrito" no topo para detalhar o MDV por setor.
+              Utilize o filtro de "Distrito" no topo para detalhar o MVD por setor.
             </p>
           </div>
         </CardContent>
@@ -247,15 +281,35 @@ export function GraficoMDV() {
   return (
     <Card className="border-slate-200 bg-white shadow-sm">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-              MDV por {estrutura}
+              <Users className="h-5 w-5 text-emerald-600" />
+              MVD por {estrutura}
             </CardTitle>
             <CardDescription className="text-slate-500 mt-1">
               Evolução da Média de Visita Diária por {estrutura.toLowerCase()} ao longo dos ciclos
               {distritoFiltro && distritoFiltro !== 'Todos' && ` em ${distritoFiltro}`}
             </CardDescription>
+          </div>
+
+          {/* Toggle Switch */}
+          <div className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100/85 transition-colors px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm shrink-0 select-none">
+            <span className="text-xs font-semibold text-slate-600">Rótulos</span>
+            <button
+              onClick={() => setShowLabels(!showLabels)}
+              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                showLabels ? "bg-blue-600" : "bg-slate-200"
+              }`}
+              role="switch"
+              aria-checked={showLabels}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  showLabels ? "translate-x-3" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
         </div>
       </CardHeader>
@@ -287,7 +341,7 @@ export function GraficoMDV() {
                     border: `1px solid ${CHART_COLORS.tooltip.border}`,
                   }}
                   itemSorter={(item) => -(item.value as number)}
-                  formatter={(value: number, name: string) => [`${value.toFixed(1)} visitas`, name]}
+                  formatter={(value, name) => [`${Number(value).toFixed(1)} visitas`, name]}
                 />
                 <Legend
                   verticalAlign="top"
@@ -318,7 +372,14 @@ export function GraficoMDV() {
                     strokeWidth={3}
                     dot={{ r: 4, strokeWidth: 2 }}
                     activeDot={{ r: 6 }}
-                  />
+                  >
+                    {showLabels && (
+                      <LabelList
+                        dataKey={label}
+                        content={<CustomLineLabel stroke={LINE_COLORS[index % LINE_COLORS.length]} />}
+                      />
+                    )}
+                  </Line>
                 ))}
               </LineChart>
             </ResponsiveContainer>

@@ -53,7 +53,6 @@ export default function ExecutiveDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const ciclo     = searchParams.get('ciclo')     || 'Todos';
   const estrutura = searchParams.get('estrutura') || 'Distrito';
   const setor     = searchParams.get('setor')     || 'Todos';
   const distritoRaw = searchParams.get('distrito') || 'Todos';
@@ -63,7 +62,7 @@ export default function ExecutiveDashboard() {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const result = await getExecutiveMetrics(ciclo, distrito, estrutura, setor);
+      const result = await getExecutiveMetrics(distrito, estrutura, setor);
       setData(result);
     } catch (err) {
       console.error('Erro ao buscar métricas:', err);
@@ -71,14 +70,13 @@ export default function ExecutiveDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [ciclo, distrito, estrutura, setor]);
+  }, [distrito, estrutura, setor]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const searchParamsObj = {
-    ciclo,
     estrutura,
     setor,
     distrito,

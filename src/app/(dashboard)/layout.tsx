@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Layout } from "@/src/components/layout/Layout";
+import { LayoutProvider } from '@/src/context/LayoutContext';
 
 export default function DashboardLayout({
   children,
@@ -14,35 +15,6 @@ export default function DashboardLayout({
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    // DESATIVADO TEMPORARIAMENTE A PEDIDO DO USUÁRIO PARA ACESSO DIRETO
-    /*
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-      } else {
-        setAuthenticated(true);
-        setLoading(false);
-      }
-    };
-    
-    checkSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!session) {
-          router.push("/login");
-        } else {
-          setAuthenticated(true);
-        }
-      }
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-    */
-    
     // Forçando a autenticação para liberar o acesso ao dashboard
     setAuthenticated(true);
     setLoading(false);
@@ -60,7 +32,11 @@ export default function DashboardLayout({
       </div>
     );
   }
-
+  
   // Se autenticado, renderiza o Layout (com Header e Sidebar) e o conteúdo da página
-  return <Layout>{children}</Layout>;
+  return (
+    <LayoutProvider>
+      <Layout>{children}</Layout>
+    </LayoutProvider>
+  );
 }

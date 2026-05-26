@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   PieChart,
   Pie,
@@ -56,7 +56,7 @@ function renderCustomLabel({
   outerRadius,
   value,
 }: any) {
-  const radius = innerRadius + (outerRadius - innerRadius) * 1.35;
+  const radius = outerRadius + 15;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
@@ -64,10 +64,10 @@ function renderCustomLabel({
     <text
       x={x}
       y={y}
-      fill="#334155"
+      fill="#475569"
       textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
-      fontSize={12}
+      fontSize={10}
       fontWeight={600}
     >
       {value.toFixed(1)}d
@@ -156,9 +156,17 @@ function CustomLegend({ payload }: any) {
   );
 }
 
+// ─── Interface ───────────────────────────────────────────────
+
+interface GraficoAbonosProps {
+  filtroDistrito?: string;
+  filtroSetor?: string;
+  filtroCiclo?: string;
+}
+
 // ─── Componente Principal ────────────────────────────────────
 
-export function GraficoAbonos() {
+export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todos' }: GraficoAbonosProps) {
   const [dados, setDados] = useState<AbonoMotivo[]>([]);
   const [totalDias, setTotalDias] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -169,19 +177,61 @@ export function GraficoAbonos() {
     setMounted(true);
   }, []);
 
-  async function fetchAbonos() {
+  const fetchAbonos = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Buscar todos os registros de fato_abonos
-      const { data, error: err } = await getSupabaseClient()
-        .from('fato_abonos')
-        .select('motivo, horas_abonadas');
+      const temFiltro =
+        (filtroDistrito && filtroDistrito !== 'Todos') ||
+        (filtroSetor    && filtroSetor    !== 'Todos');
 
-      if (err) {
-        throw new Error(`Erro ao buscar abonos: ${err.message}`);
+      // Passo 1: se há filtro, buscar os cod_setor correspondentes em dim_hierarquia
+      let codSetores: string[] | null = null;
+      if (temFiltro) {
+        let hierQuery = getSupabaseClient()
+          .from('dim_hierarquia')
+          .select('cod_setor');
+
+        if (filtroDistrito && filtroDistrito !== 'Todos') {
+          hierQuery = hierQuery.eq('nome_distrito', filtroDistrito);
+        }
+        if (filtroSetor && filtroSetor !== 'Todos') {
+          hierQuery = hierQuery.eq('nome_setor', filtroSetor);
+        }
+
+        const { data: hierData, error: hierErr } = await hierQuery;
+        if (hierErr) throw new Error(`Erro ao buscar hierarquia: ${hierErr.message}`);
+        codSetores = (hierData ?? []).map((h: any) => h.cod_setor);
+
+        if (codSetores.length === 0) {
+          setDados([]);
+          setTotalDias(0);
+          return;
+        }
       }
+
+      // Passo 2: buscar fato_abonos filtrado por cod_setor e/ou ciclo
+      // Sempre fazemos JOIN com dim_calendario pra poder filtrar/ignorar ciclos.
+      const usaFiltroCiclo = filtroCiclo && filtroCiclo !== 'Todos';
+
+      let query = getSupabaseClient()
+        .from('fato_abonos')
+        .select('motivo, horas_abonadas, dim_calendario!inner(ciclo)');
+
+      if (codSetores !== null) {
+        query = query.in('cod_setor', codSetores);
+      }
+
+      if (usaFiltroCiclo) {
+        query = query.eq('dim_calendario.ciclo', filtroCiclo);
+      } else {
+        // Ignora ciclo "00" (dias não úteis) quando mostrando "Todos"
+        query = query.not('dim_calendario.ciclo', 'like', '%00');
+      }
+
+      const { data, error: err } = await query;
+      if (err) throw new Error(`Erro ao buscar abonos: ${err.message}`);
 
       if (!data || data.length === 0) {
         setDados([]);
@@ -197,11 +247,10 @@ export function GraficoAbonos() {
         agrupado[motivo] = (agrupado[motivo] || 0) + horas;
       });
 
-      // Converter para array, ordenar e pegar top 5
       const sorted = Object.entries(agrupado)
         .map(([motivo, totalHoras]) => ({
           name: motivo,
-          value: Math.round((totalHoras / 8) * 10) / 10, // converter para dias com 1 decimal
+          value: Math.round((totalHoras / 8) * 10) / 10,
         }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 6)
@@ -220,17 +269,17 @@ export function GraficoAbonos() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [filtroDistrito, filtroSetor, filtroCiclo]);
 
   useEffect(() => {
     fetchAbonos();
-  }, []);
+  }, [fetchAbonos]);
 
   // ─── Estado: Carregando ─────────────────────────────────────
 
   if (loading) {
     return (
-      <Card className="border-slate-200 bg-white shadow-sm lg:col-span-1">
+      <Card className="border-0 shadow-none rounded-none bg-transparent lg:col-span-1 h-full">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Clock className="h-5 w-5 text-violet-600" />
@@ -274,7 +323,7 @@ export function GraficoAbonos() {
               <AlertTriangle className="h-6 w-6 text-red-400" />
               <p className="text-sm text-slate-600 max-w-xs">{error}</p>
               <button
-                onClick={() => fetchAbonos()}
+                onClick={fetchAbonos}
                 className="mt-2 px-4 py-2 text-xs font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 transition-colors"
               >
                 Tentar novamente
@@ -290,7 +339,7 @@ export function GraficoAbonos() {
 
   if (dados.length === 0) {
     return (
-      <Card className="border-slate-200 bg-white shadow-sm lg:col-span-1">
+      <Card className="border-0 shadow-none rounded-none bg-transparent lg:col-span-1 h-full">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Clock className="h-5 w-5 text-violet-600" />
@@ -314,7 +363,7 @@ export function GraficoAbonos() {
   // ─── Renderização Principal ─────────────────────────────────
 
   return (
-    <Card className="border-slate-200 bg-white shadow-sm lg:col-span-1">
+    <Card className="border-0 shadow-none rounded-none bg-transparent lg:col-span-1 h-full">
       <CardHeader>
         <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <Clock className="h-5 w-5 text-violet-600" />
@@ -333,8 +382,8 @@ export function GraficoAbonos() {
                   data={dados}
                   cx="50%"
                   cy="55%"
-                  innerRadius={75}
-                  outerRadius={115}
+                  innerRadius={65}
+                  outerRadius={95}
                   paddingAngle={3}
                   dataKey="value"
                   label={renderCustomLabel}
@@ -368,7 +417,7 @@ export function GraficoAbonos() {
                   <tspan
                     x="50%"
                     dy="-8"
-                    fontSize="24"
+                    fontSize="22"
                     fontWeight="700"
                     fill="#0f172a"
                   >
@@ -376,8 +425,8 @@ export function GraficoAbonos() {
                   </tspan>
                   <tspan
                     x="50%"
-                    dy="20"
-                    fontSize="11"
+                    dy="18"
+                    fontSize="10"
                     fontWeight="500"
                     fill="#94a3b8"
                   >

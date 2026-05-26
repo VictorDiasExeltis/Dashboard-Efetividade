@@ -1,34 +1,31 @@
 'use client';
 
 import React from 'react';
-import { 
-  TrendingUp, 
-  Users, 
+import { cn } from '@/src/lib/utils';
+import { useSearchParams } from 'next/navigation';
+import {
+  TrendingUp,
+  Users,
   Package,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Link2,
+  Clock
 } from 'lucide-react';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle, 
-  CardDescription 
-} from '@/src/components/ui/card';
+import { Card, CardContent } from '@/src/components/ui/card';
 
 import { DashboardFilters } from './DashboardFilters';
 import { GraficoCobertura } from './GraficoCobertura';
 import { GraficoMDV } from './GraficoMDV';
 import { GraficoAbonos } from './GraficoAbonos';
+import { TabelaRepresentantes } from './TabelaRepresentantes';
+import { useLayout } from '@/src/context/LayoutContext';
 
 interface ExecutiveDashboardProps {
   data: {
     kpis: {
-      ciclo01: { cobertura: number; mdv: number };
-      ciclo02: { cobertura: number; mdv: number };
-      ciclo03: { cobertura: number; mdv: number };
-      selected: { 
-        cobertura: number; 
+      selected: {
+        cobertura: number;
         mdv: number;
         visitasTotais: number;
         contatos: number;
@@ -37,7 +34,14 @@ interface ExecutiveDashboardProps {
         cobertura: number;
         mdv: number;
       };
-      previous: { cobertura: number; mdv: number } | null;
+      trend: {
+        cobertura: number;
+        mdv: number;
+        visitasTotais: number;
+        contatos: number;
+      };
+      last_ciclo?: string;
+      prev_ciclo?: string;
       diasRestantes?: number;
     };
     chartData: any[];
@@ -46,20 +50,36 @@ interface ExecutiveDashboardProps {
   searchParams?: any;
 }
 
-// Dados Mock para componentes que ainda serão desenvolvidos
 
-const mockRepsData = [
-  { id: '1', nome: 'João Silva', setor: 'SP-01', distrito: 'São Paulo', diasTrabalhados: 20, diasAbonados: 2 },
-  { id: '2', nome: 'Maria Santos', setor: 'RJ-02', distrito: 'Rio de Janeiro', diasTrabalhados: 18, diasAbonados: 4 },
-  { id: '3', nome: 'Pedro Costa', setor: 'MG-01', distrito: 'Minas Gerais', diasTrabalhados: 22, diasAbonados: 0 },
-  { id: '4', nome: 'Ana Oliveira', setor: 'PR-03', distrito: 'Sul', diasTrabalhados: 15, diasAbonados: 7 },
-  { id: '5', nome: 'Lucas Lima', setor: 'BA-01', distrito: 'Nordeste', diasTrabalhados: 21, diasAbonados: 1 },
-  { id: '6', nome: 'Carlos Souza', setor: 'SP-02', distrito: 'São Paulo', diasTrabalhados: 22, diasAbonados: 0 },
-];
+function formatarCiclo(ciclo: string): string {
+  const num = ciclo.slice(-2);
+  return `Ciclo ${num.padStart(2, '0')}`;
+}
 
 export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashboardProps) {
   const { kpis } = data;
- 
+  const { setHeaderState } = useLayout();
+  const urlParams = useSearchParams();
+  const filtroDistrito = urlParams.get('distrito') || 'Todos';
+  const filtroSetor = urlParams.get('setor') || 'Todos';
+
+  // Estado compartilhado entre o donut de abonos e a tabela de representantes.
+  // O seletor de ciclo vive dentro da tabela (já existia) e propaga pra cá via onCicloChange.
+  const [filtroCicloAbonos, setFiltroCicloAbonos] = React.useState('Todos');
+  React.useEffect(() => {
+    setHeaderState({
+      title: "Cobertura e Média de Visitação",
+      subtitle: "Resumo de performance operacional e cobertura de mercado",
+      filters: (
+        <React.Suspense fallback={<div className="h-10 w-40 bg-slate-100 animate-pulse rounded-md" />}>
+          <DashboardFilters availableSetores={data.availableSetores} />
+        </React.Suspense>
+      )
+    });
+
+    return () => setHeaderState({});
+  }, [data.availableSetores, setHeaderState]);
+
   const kpiCards = [
     {
       title: `Cobertura de Visitação`,
@@ -72,7 +92,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       bg: "bg-blue-50"
     },
     {
-      title: "MDV (Média Visita Diária)",
+      title: "MVD (Média Visita Diária)",
       value: Number(kpis.selected.mdv).toFixed(1),
       description: `Média Brasil: ${Number(kpis.brasilSelected?.mdv || 0).toFixed(1)}`,
       trend: `${kpis.trend?.mdv >= 0 ? '+' : ''}${Number(kpis.trend?.mdv || 0).toFixed(1)} vs ciclo anterior`,
@@ -84,9 +104,9 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
     {
       title: "Visitas Totais",
       value: Number(kpis.selected.visitasTotais).toLocaleString('pt-BR'),
-      description: "Soma de todos os ciclos",
-      trend: null,
-      trendType: null,
+      description: "Total do ciclo atual",
+      trend: `${kpis.trend?.visitasTotais >= 0 ? '+' : ''}${Number(kpis.trend?.visitasTotais || 0).toLocaleString('pt-BR')} vs ciclo anterior`,
+      trendType: (kpis.trend?.visitasTotais || 0) >= 0 ? 'up' : 'down',
       icon: Package,
       color: "text-amber-600",
       bg: "bg-amber-50"
@@ -94,9 +114,9 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
     {
       title: "Contatos (Médicos)",
       value: Number(kpis.selected.contatos).toLocaleString('pt-BR'),
-      description: "Visitas únicas no período",
-      trend: null,
-      trendType: null,
+      description: "Visitas únicas no ciclo atual",
+      trend: `${kpis.trend?.contatos >= 0 ? '+' : ''}${Number(kpis.trend?.contatos || 0).toLocaleString('pt-BR')} vs ciclo anterior`,
+      trendType: (kpis.trend?.contatos || 0) >= 0 ? 'up' : 'down',
       icon: Users,
       color: "text-slate-600",
       bg: "bg-slate-100"
@@ -105,25 +125,14 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
 
   return (
     <div className="space-y-4 p-6 pt-5">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Cobertura e Média de Visitação</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Resumo de performance operacional<br />e cobertura de mercado (Dados em Tempo Real).
+      {/* KPI Info Header */}
+      <div className="flex items-center justify-between px-1 mb-2">
+        <div className="flex items-center gap-2 text-slate-500">
+          <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+            Dados: Todos os Ciclos
           </p>
         </div>
-        <React.Suspense fallback={<div className="h-10 w-40 bg-slate-100 animate-pulse rounded-md" />}>
-          <DashboardFilters availableSetores={data.availableSetores} />
-        </React.Suspense>
-      </div>
-
-      {/* KPI Info Header */}
-      <div className="flex items-center gap-2 px-1 text-slate-500">
-        <div className="h-1 w-1 rounded-full bg-slate-400" />
-        <p className="text-[11px] font-medium uppercase tracking-wider">
-          Dados: Todos os Ciclos
-        </p>
       </div>
 
       {/* KPI Cards */}
@@ -157,51 +166,28 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
         <GraficoCobertura />
         <GraficoMDV />
 
-        {/* Abonos Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Abonos Chart — dados reais do Supabase */}
-          <GraficoAbonos />
-
-          {/* Abonos Table */}
-          <Card className="border-slate-200 bg-white shadow-sm lg:col-span-2 flex flex-col overflow-hidden">
-            <CardHeader className="border-b border-slate-200 bg-slate-50/50 pb-4">
-              <CardTitle className="text-lg font-semibold text-slate-900">
-                Detalhamento por Representante
-              </CardTitle>
-              <CardDescription className="text-slate-500">
-                Dias trabalhados e abonados no período
-              </CardDescription>
-            </CardHeader>
-            <div className="overflow-x-auto flex-1">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Nome</th>
-                    <th className="px-4 py-3 font-medium">Setor</th>
-                    <th className="px-4 py-3 font-medium">Distrito</th>
-                    <th className="px-4 py-3 font-medium text-center">Dias Trabalhados</th>
-                    <th className="px-4 py-3 font-medium text-center">Dias Abonados</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {mockRepsData.map((rep) => (
-                    <tr key={rep.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-900">{rep.nome}</td>
-                      <td className="px-4 py-3 text-slate-600">{rep.setor}</td>
-                      <td className="px-4 py-3 text-slate-600">{rep.distrito}</td>
-                      <td className="px-4 py-3 text-center text-slate-600">{rep.diasTrabalhados}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={rep.diasAbonados > 0 ? "text-amber-600 font-medium" : "text-slate-500"}>
-                          {rep.diasAbonados}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
+        {/* ─── Análise de Abonos por Ciclo ────────────────────────
+            Donut e tabela compartilham o mesmo filtro de ciclo.
+            Visualmente: um único card-container com header indicando o
+            vínculo, divisor entre os dois sub-componentes, e badge
+            "Sincronizado" quando há um ciclo específico selecionado.
+        */}
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {/* Corpo: donut + tabela com divisor vertical */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 lg:divide-x divide-slate-200">
+            <GraficoAbonos
+              filtroDistrito={filtroDistrito}
+              filtroSetor={filtroSetor}
+              filtroCiclo={filtroCicloAbonos}
+            />
+            <TabelaRepresentantes
+              filtroDistrito={filtroDistrito}
+              filtroSetor={filtroSetor}
+              filtroCiclo={filtroCicloAbonos}
+              onCicloChange={setFiltroCicloAbonos}
+            />
+          </div>
+        </section>
       </div>
     </div>
   );
