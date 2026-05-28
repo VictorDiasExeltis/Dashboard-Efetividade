@@ -19,7 +19,7 @@ import {
 
 const ESTRUTURAS = ['Distrito', 'Setor'];
 
-const TRIGGER_BASE = 'h-8 text-[11px] lg:text-sm bg-white border-slate-200 shadow-sm transition-colors';
+const TRIGGER_BASE = 'h-7 py-1 text-xs bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2.5 rounded-md border [&>span]:block [&>span]:truncate overflow-hidden';
 
 // "202605" → "Ciclo 05"
 function formatCiclo(ciclo: string): string {
@@ -113,7 +113,7 @@ export function SegmentacaoFilters() {
     <div className="flex flex-row items-center gap-2 w-full">
 
       {/* Ciclo */}
-      <div className="flex flex-col gap-1 w-[100px] shrink-0">
+      <div className="flex flex-col gap-1 w-[90px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Ciclo</label>
         <CustomDropdown
           value={currentCiclo}
@@ -125,7 +125,7 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Classificação */}
-      <div className="flex flex-col gap-1 w-[130px] shrink-0">
+      <div className="flex flex-col gap-1 w-[110px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Classificação</label>
         <CustomDropdown
           value={currentClassificacao}
@@ -137,7 +137,7 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Estrutura */}
-      <div className="flex flex-col gap-1 w-[100px] shrink-0">
+      <div className="flex flex-col gap-1 w-[90px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Estrutura</label>
         <Select value={currentEstrutura} onValueChange={handleEstrutura}>
           <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
@@ -154,7 +154,7 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Distrito */}
-      <div className="flex flex-col gap-1 w-[120px] shrink-0">
+      <div className="flex flex-col gap-1 w-[110px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
           Distrito{isSetorMode && <span className="ml-1 text-blue-500">*</span>}
         </label>
@@ -173,7 +173,7 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Setor */}
-      <div className="flex flex-col gap-1 w-[120px] shrink-0">
+      <div className="flex flex-col gap-1 w-[110px] shrink-0">
         <label className={`text-[10px] font-semibold uppercase tracking-wide ${isSetorMode ? 'text-slate-500' : 'text-slate-300'}`}>
           Setor
         </label>

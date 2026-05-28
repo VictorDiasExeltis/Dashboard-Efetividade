@@ -12,6 +12,7 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Input } from '@/src/components/ui/input';
@@ -220,7 +221,8 @@ export function TargetListClient() {
       description: "Médicos ativos zerados nos últimos 3 ciclos",
       icon: Users,
       color: "text-slate-600",
-      bg: "bg-slate-100"
+      bg: "bg-slate-100",
+      tooltip: "Médicos ativos no painel sem visitas registradas nos últimos 3 ciclos."
     },
     {
       title: "Taxa de Abandono",
@@ -232,7 +234,8 @@ export function TargetListClient() {
         : 'Sem ativos no território',
       icon: TrendingDown,
       color: "text-rose-600",
-      bg: "bg-rose-50"
+      bg: "bg-rose-50",
+      tooltip: "Percentual de médicos sem visitas nos últimos 3 ciclos em relação ao total de médicos ativos do território."
     },
     {
       title: "Alto Potencial Abandonado",
@@ -240,7 +243,8 @@ export function TargetListClient() {
       description: "Não-visitados com potencial 4 ou 5",
       icon: Flame,
       color: "text-purple-600",
-      bg: "bg-purple-50"
+      bg: "bg-purple-50",
+      tooltip: "Médicos sem visitas nos últimos 3 ciclos com alto potencial de prescrição (potencial 4 ou 5)."
     },
     {
       title: "Multi-marca Abandonado",
@@ -248,7 +252,8 @@ export function TargetListClient() {
       description: "Não-visitados com segmentação ativa em 3+ marcas",
       icon: Layers,
       color: "text-blue-600",
-      bg: "bg-blue-50"
+      bg: "bg-blue-50",
+      tooltip: "Médicos sem visitas nos últimos 3 ciclos com segmentação ativa em 3 ou mais marcas de produtos simultaneamente."
     }
   ];
 
@@ -266,7 +271,15 @@ export function TargetListClient() {
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
+                <div className="flex items-center gap-1 group relative">
+                  <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
+                  <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
+                  
+                  {/* Tooltip Popup */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none">
+                    {kpi.tooltip}
+                  </div>
+                </div>
                 {loading
                   ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
                   : <h3 className="text-2xl font-bold text-slate-900">{kpi.value}</h3>}

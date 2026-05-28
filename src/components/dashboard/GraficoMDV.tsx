@@ -28,8 +28,8 @@ const config: LineChartCardConfig = {
     return Math.round((row.total_visitas / row.total_dias) * 10) / 10;
   },
 
-  yDomain: [6, 12],
-  yTicks: [6, 7.5, 9, 10.5, 12],
+  yDomain: [7, 12],
+  yTicks: [7, 8.25, 9.5, 10.75, 12],
   yTickFormatter: (v) => v.toFixed(1),
   tooltipFormatter: (v) => `${v.toFixed(1)} visitas`,
   labelFormatValue: (v) => v.toFixed(1),

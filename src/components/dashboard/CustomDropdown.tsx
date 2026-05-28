@@ -112,7 +112,7 @@ export function CustomDropdown({
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "h-8 text-sm bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-3 rounded-md border hover:border-slate-300 [&>span]:block [&>span]:truncate overflow-hidden text-left",
+          "h-7 text-xs bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2.5 rounded-md border hover:border-slate-300 [&>span]:block [&>span]:truncate overflow-hidden text-left",
           disabled && "opacity-40 cursor-not-allowed",
           isOpen && "border-blue-500 ring-1 ring-blue-500"
         )}
@@ -120,7 +120,7 @@ export function CustomDropdown({
         <span className="text-slate-900 block truncate pr-2 w-full">
           {displayLabel || placeholder}
         </span>
-        <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+        <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
       </button>
 
       {isOpen && (
@@ -129,7 +129,7 @@ export function CustomDropdown({
           <div
             onClick={(e) => handleOptionClick(defaultValue, e)}
             className={cn(
-              "px-3 py-1.5 text-sm cursor-pointer rounded-md mx-1 transition-colors hover:bg-slate-50",
+              "px-2.5 py-1 text-xs cursor-pointer rounded-md mx-1 transition-colors hover:bg-slate-50",
               activeSelected.length === 0
                 ? "bg-blue-50 text-blue-700 font-semibold"
                 : "text-slate-700"
@@ -146,7 +146,7 @@ export function CustomDropdown({
                   key={opt.value}
                   onClick={(e) => handleOptionClick(opt.value, e)}
                   className={cn(
-                    "px-3 py-1.5 text-sm cursor-pointer rounded-md mx-1 transition-colors hover:bg-slate-50",
+                    "px-2.5 py-1 text-xs cursor-pointer rounded-md mx-1 transition-colors hover:bg-slate-50",
                     isSelected
                       ? "bg-blue-50 text-blue-700 font-semibold"
                       : "text-slate-700"

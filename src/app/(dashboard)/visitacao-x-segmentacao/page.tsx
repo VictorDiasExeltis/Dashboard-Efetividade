@@ -3,7 +3,7 @@
 import React, { Suspense } from 'react';
 import { SegmentacaoFilters } from '@/src/components/dashboard/SegmentacaoFilters';
 import { Card, CardContent } from "@/src/components/ui/card";
-import { Shield, Target, UserCheck, Eye } from 'lucide-react';
+import { Shield, Target, UserCheck, Eye, HelpCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useLayout } from '@/src/context/LayoutContext';
@@ -302,7 +302,15 @@ export default function VisitacaoXSegmentacao() {
                   )}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-500">{seg}</p>
+                  <div className="flex items-center gap-1 group relative">
+                    <p className="text-sm font-medium text-slate-500">{seg}</p>
+                    <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
+                    
+                    {/* Tooltip Popup */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none normal-case">
+                      Percentual de médicos visitados em relação ao total planejado (painel) para a estratégia {seg.toLowerCase()} no ciclo selecionado.
+                    </div>
+                  </div>
                   {loadingKpis
                     ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
                     : <h3 className="text-2xl font-bold text-slate-900">{cobertura.toFixed(1)}%</h3>}

@@ -16,7 +16,7 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
-import { Package, Users, Percent, Shield } from 'lucide-react';
+import { Package, Users, Percent, Shield, HelpCircle } from 'lucide-react';
 import { DashboardFilters } from '@/src/components/dashboard/DashboardFilters';
 import { getAvailableSetores, getAmostrasData } from '@/src/app/actions';
 import { useLayout } from '@/src/context/LayoutContext';
@@ -191,6 +191,7 @@ function AlocacaoDeRecursosContent() {
       icon: Users,
       color: "text-blue-600",
       bg: "bg-blue-50",
+      tooltip: "Total de médicos únicos ativos cadastrados no painel do território selecionado."
     },
     {
       title: "Média Geral de Amostras",
@@ -199,6 +200,7 @@ function AlocacaoDeRecursosContent() {
       icon: Package,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
+      tooltip: "Quantidade média de amostras entregues por médico do painel (Total de Amostras / Total de Médicos do Painel)."
     },
     {
       title: "Total de Amostras Entregues",
@@ -207,6 +209,7 @@ function AlocacaoDeRecursosContent() {
       icon: Shield,
       color: "text-purple-600",
       bg: "bg-purple-50",
+      tooltip: "Soma de todas as unidades de amostras grátis entregues no período."
     },
     {
       title: "Segmentações Ativas",
@@ -215,6 +218,7 @@ function AlocacaoDeRecursosContent() {
       icon: Percent,
       color: "text-amber-600",
       bg: "bg-amber-50",
+      tooltip: "Quantidade de segmentos (ex: Proteger, Conquistar) que possuem médicos cadastrados no território."
     },
   ];
 
@@ -232,7 +236,15 @@ function AlocacaoDeRecursosContent() {
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
+                <div className="flex items-center gap-1 group relative">
+                  <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
+                  <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
+                  
+                  {/* Tooltip Popup */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none">
+                    {kpi.tooltip}
+                  </div>
+                </div>
                 {loading
                   ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
                   : <h3 className="text-2xl font-bold text-slate-900">{kpi.value}</h3>

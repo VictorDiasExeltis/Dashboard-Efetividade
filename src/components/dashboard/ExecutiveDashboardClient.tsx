@@ -10,7 +10,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Link2,
-  Clock
+  Clock,
+  HelpCircle
 } from 'lucide-react';
 import { Card, CardContent } from '@/src/components/ui/card';
 
@@ -89,7 +90,8 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       trendType: (kpis.trend?.cobertura || 0) >= 0 ? 'up' : 'down',
       icon: TrendingUp,
       color: "text-blue-600",
-      bg: "bg-blue-50"
+      bg: "bg-blue-50",
+      tooltip: "Proporção de médicos visitados em relação ao total planejado (painel) no período selecionado."
     },
     {
       title: "MVD (Média Visita Diária)",
@@ -99,7 +101,8 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       trendType: (kpis.trend?.mdv || 0) >= 0 ? 'up' : 'down',
       icon: Users,
       color: "text-emerald-600",
-      bg: "bg-emerald-50"
+      bg: "bg-emerald-50",
+      tooltip: "Média de visitas por dia útil trabalhado, dividindo o total de visitas pelos dias trabalhados declarados no período."
     },
     {
       title: "Visitas Totais",
@@ -109,7 +112,8 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       trendType: (kpis.trend?.visitasTotais || 0) >= 0 ? 'up' : 'down',
       icon: Package,
       color: "text-amber-600",
-      bg: "bg-amber-50"
+      bg: "bg-amber-50",
+      tooltip: "Quantidade absoluta de contatos promocionais e visitas (presenciais ou remotas) no ciclo corrente."
     },
     {
       title: "Contatos (Médicos)",
@@ -119,7 +123,8 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       trendType: (kpis.trend?.contatos || 0) >= 0 ? 'up' : 'down',
       icon: Users,
       color: "text-slate-600",
-      bg: "bg-slate-100"
+      bg: "bg-slate-100",
+      tooltip: "Total de médicos distintos que receberam pelo menos uma visita no ciclo selecionado."
     }
   ];
 
@@ -152,7 +157,15 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
                 )}
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
+                <div className="flex items-center gap-1 group relative">
+                  <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
+                  <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
+                  
+                  {/* Tooltip Popup */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none">
+                    {kpi.tooltip}
+                  </div>
+                </div>
                 <h3 className="text-2xl font-bold text-slate-900">{kpi.value}</h3>
                 <p className="text-xs text-slate-400">{kpi.description}</p>
               </div>
