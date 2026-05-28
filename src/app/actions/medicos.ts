@@ -28,12 +28,14 @@ export async function getMedicosNaoVisitados(
         m.nome_medico,
         m.classificacao,
         m.score,
+        m.potencial,
         m.especialidade,
         MAX(CASE WHEN s.id_marca = 10005 THEN s.segmentacao END) AS slinda,
         MAX(CASE WHEN s.id_marca = 10004 THEN s.segmentacao END) AS regenesis,
         MAX(CASE WHEN s.id_marca = 10002 THEN s.segmentacao END) AS gynpro,
         MAX(CASE WHEN s.id_marca = 10001 THEN s.segmentacao END) AS gynotran,
-        MAX(CASE WHEN s.id_marca = 10003 THEN s.segmentacao END) AS hemolip
+        MAX(CASE WHEN s.id_marca = 10003 THEN s.segmentacao END) AS hemolip,
+        MAX(CASE WHEN s.id_marca = 10007 THEN s.segmentacao END) AS vizuria
       FROM dim_medicos m
       LEFT JOIN fato_segmentacao s ON s.crmuf = m.crmuf
       WHERE m.status = TRUE
@@ -46,8 +48,17 @@ export async function getMedicosNaoVisitados(
               ORDER BY ciclo DESC LIMIT 3
             )
         )
+        -- Não incluídos nos últimos 3 ciclos
+        AND (m.data_inclusao IS NULL OR m.data_inclusao < (
+          SELECT MIN(c.data)
+          FROM public.dim_calendario c
+          WHERE c.ciclo IN (
+            SELECT DISTINCT mc.ciclo FROM metas_ciclo mc
+            ORDER BY mc.ciclo DESC LIMIT 3
+          )
+        ))
         ${territorioExists}
-      GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score
+      GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score, m.potencial
       ORDER BY m.score DESC NULLS LAST, m.nome_medico
     `);
 
@@ -56,11 +67,13 @@ export async function getMedicosNaoVisitados(
       nome_medico:   r.nome_medico   ?? '',
       classificacao: r.classificacao ?? null,
       score:         r.score != null ? Number(r.score) : null,
+      potencial:     r.potencial != null ? Number(r.potencial) : null,
       slinda:        r.slinda        ?? null,
       regenesis:     r.regenesis     ?? null,
       gynpro:        r.gynpro        ?? null,
       gynotran:      r.gynotran      ?? null,
       hemolip:       r.hemolip       ?? null,
+      vizuria:       r.vizuria       ?? null,
       especialidade: r.especialidade ?? null,
     }));
   } catch (e) {
@@ -94,6 +107,15 @@ export async function getTotalMedicosAtivosTerritorio(
       SELECT COUNT(*)::int AS total
       FROM dim_medicos m
       WHERE m.status = TRUE
+        -- Não incluídos nos últimos 3 ciclos
+        AND (m.data_inclusao IS NULL OR m.data_inclusao < (
+          SELECT MIN(c.data)
+          FROM public.dim_calendario c
+          WHERE c.ciclo IN (
+            SELECT DISTINCT mc.ciclo FROM metas_ciclo mc
+            ORDER BY mc.ciclo DESC LIMIT 3
+          )
+        ))
         ${territorioExists}
     `);
 

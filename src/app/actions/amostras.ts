@@ -26,14 +26,16 @@ export async function getAmostrasData(
         )`
       : sql``;
 
-    const cicloJoin = ciclo !== 'Todos' ? sql`AND v.ciclo = ${ciclo}` : sql``;
+    const cicloJoin = ciclo !== 'Todos'
+      ? sql`AND v.ciclo IN (${sql.raw(ciclo.split(',').map((c) => `'${c.trim()}'`).join(','))})`
+      : sql``;
 
     // Filtro de produto restringe quais linhas de fato_amostras entram na soma.
     // Aplicado no ON do LEFT JOIN para preservar médicos sem amostras do produto
     // (eles continuam no denominador com média 0).
     const produtoJoin = produto !== 'Todos'
       ? sql`AND a.id_produto IN (
-          SELECT id_produto FROM dim_produtos WHERE nome_produto = ${produto}
+          SELECT id_produto FROM dim_produtos WHERE nome_produto IN (${sql.raw(produto.split(',').map((p) => `'${p.trim()}'`).join(','))})
         )`
       : sql``;
 
@@ -46,20 +48,45 @@ export async function getAmostrasData(
             ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}`
       : sql``;
 
+    // Filtros para a query partindo de fato_amostras (centrada na entrega).
+    const territorioFiltro = (distrito !== 'Todos' || setor !== 'Todos')
+      ? sql`AND v.cod_setor IN (
+          SELECT h.cod_setor FROM dim_hierarquia h
+          WHERE TRUE
+            ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
+            ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}
+        )`
+      : sql``;
+    const cicloFiltro = ciclo !== 'Todos'
+      ? sql`AND v.ciclo IN (${sql.raw(ciclo.split(',').map((c) => `'${c.trim()}'`).join(','))})`
+      : sql``;
+    const produtoFiltro = produto !== 'Todos'
+      ? sql`AND p.nome_produto IN (${sql.raw(produto.split(',').map((p) => `'${p.trim()}'`).join(','))})`
+      : sql``;
+
     const [segResult, classResult, totalResult, painelResult] = await Promise.all([
+      // Segmentação determinada pela MARCA do produto efetivamente entregue.
+      // Um médico que recebe amostras de marcas diferentes aparece em cada
+      // segmentação correspondente; se não tem segmentação cadastrada para a
+      // marca da entrega, cai em "SEM SEGMENTAÇÃO".
       db.execute(sql`
         SELECT
           COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO') AS segmentacao,
-          COUNT(DISTINCT s.crmuf)::integer            AS total_medicos,
+          COUNT(DISTINCT v.crmuf)::integer AS total_medicos,
           COALESCE(
             SUM(a.quantidade)::numeric / NULLIF(COUNT(DISTINCT v.crmuf), 0),
             0
           )::numeric AS media_amostras
-        FROM fato_segmentacao s
-        INNER JOIN dim_medicos m ON m.crmuf = s.crmuf AND m.status = TRUE
-        LEFT JOIN fato_visitas  v ON v.crmuf     = s.crmuf ${territorioJoin} ${cicloJoin}
-        LEFT JOIN fato_amostras a ON a.id_visita = v.id_visita ${produtoJoin}
-        GROUP BY s.segmentacao
+        FROM fato_amostras a
+        INNER JOIN fato_visitas  v ON v.id_visita = a.id_visita
+        INNER JOIN dim_produtos  p ON p.id_produto = a.id_produto
+        LEFT  JOIN fato_segmentacao s
+          ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca
+        WHERE TRUE
+          ${territorioFiltro}
+          ${cicloFiltro}
+          ${produtoFiltro}
+        GROUP BY COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
         ORDER BY CASE COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
           WHEN 'PROTEGER'   THEN 1
           WHEN 'CONQUISTAR' THEN 2
@@ -71,9 +98,9 @@ export async function getAmostrasData(
       db.execute(sql`
         SELECT
           TRIM(m.classificacao)                       AS classificacao,
-          COUNT(DISTINCT m.crmuf)::integer            AS total_medicos,
+          COUNT(DISTINCT CASE WHEN a.id_visita IS NOT NULL THEN m.crmuf END)::integer AS total_medicos,
           COALESCE(
-            SUM(a.quantidade)::numeric / NULLIF(COUNT(DISTINCT v.crmuf), 0),
+            SUM(a.quantidade)::numeric / NULLIF(COUNT(DISTINCT CASE WHEN a.id_visita IS NOT NULL THEN v.crmuf END), 0),
             0
           )::numeric AS media_amostras
         FROM dim_medicos m
@@ -95,7 +122,7 @@ export async function getAmostrasData(
           ${territorioJoin}
           ${cicloJoin}
           ${produto !== 'Todos' ? sql`AND a.id_produto IN (
-            SELECT id_produto FROM dim_produtos WHERE nome_produto = ${produto}
+            SELECT id_produto FROM dim_produtos WHERE nome_produto IN (${sql.raw(produto.split(',').map((p) => `'${p.trim()}'`).join(','))})
           )` : sql``}
       `),
       // Tamanho do painel — denominador da média geral.

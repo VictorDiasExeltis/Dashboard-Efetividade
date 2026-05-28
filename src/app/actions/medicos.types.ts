@@ -7,10 +7,12 @@ export interface MedicoNaoVisitado {
   nome_medico:   string;
   classificacao: string | null;
   score:         number | null;
+  potencial:     number | null;
   slinda:      string | null;
   regenesis:   string | null;
   gynpro:      string | null;
   gynotran:    string | null;
   hemolip:     string | null;
+  vizuria:     string | null;
   especialidade: string | null;
 }

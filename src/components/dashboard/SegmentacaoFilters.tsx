@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/src/components/ui/select';
+import { CustomDropdown } from './CustomDropdown';
 import {
   getClassificacoes,
   getSetoresPorDistrito,
@@ -66,6 +67,9 @@ export function SegmentacaoFilters() {
     ? distritos                              // setor exige distrito específico
     : ['Todos', ...distritos];
 
+  const cicloOptions = useMemo(() => ciclos.map((c) => ({ label: formatCiclo(c), value: c })), [ciclos]);
+  const classificacaoOptions = useMemo(() => classificacoes.map((c) => ({ label: c, value: c })), [classificacoes]);
+
   useEffect(() => {
     if (!isSetorMode) {
       setSetoresDisponiveis([]);
@@ -109,44 +113,31 @@ export function SegmentacaoFilters() {
     <div className="flex flex-row items-center gap-2 w-full">
 
       {/* Ciclo */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[100px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Ciclo</label>
-        <Select value={currentCiclo} onValueChange={(v) => updateParam('ciclo', v)} disabled={!ciclos.length}>
-          <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
-            <SelectValue placeholder={ciclos.length ? undefined : 'Carregando...'} />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
-            {ciclos.map((c) => (
-              <SelectItem key={c} value={c} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-                {formatCiclo(c)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CustomDropdown
+          value={currentCiclo}
+          onChange={(v) => updateParam('ciclo', v)}
+          options={cicloOptions}
+          defaultValue="Todos"
+          disabled={!ciclos.length}
+        />
       </div>
 
       {/* Classificação */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[130px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Classificação</label>
-        <Select value={currentClassificacao} onValueChange={(v) => updateParam('classificacao', v)}>
-          <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg">
-            <SelectItem value="Todas" className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-              Todas
-            </SelectItem>
-            {classificacoes.map((c) => (
-              <SelectItem key={c} value={c} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-                {c}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CustomDropdown
+          value={currentClassificacao}
+          onChange={(v) => updateParam('classificacao', v)}
+          options={classificacaoOptions}
+          defaultValue="Todas"
+          disabled={!classificacoes.length}
+        />
       </div>
 
       {/* Estrutura */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[100px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Estrutura</label>
         <Select value={currentEstrutura} onValueChange={handleEstrutura}>
           <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
@@ -163,7 +154,7 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Distrito */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[120px] shrink-0">
         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
           Distrito{isSetorMode && <span className="ml-1 text-blue-500">*</span>}
         </label>
@@ -182,7 +173,7 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Setor */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[120px] shrink-0">
         <label className={`text-[10px] font-semibold uppercase tracking-wide ${isSetorMode ? 'text-slate-500' : 'text-slate-300'}`}>
           Setor
         </label>

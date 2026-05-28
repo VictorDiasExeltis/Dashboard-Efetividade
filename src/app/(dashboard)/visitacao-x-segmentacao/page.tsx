@@ -21,7 +21,7 @@ const productMarcaMap: Record<string, number> = {
   "GYNOTRAN": 10001,
   "GYNPRO": 10002,
   "HEMOLIP": 10003,
-  "EXELRING": 10006,
+  "VIZURIA": 10007,
 };
 
 // Ordem canônica + estilo de cada segmentação. Mantemos uma única fonte para
@@ -120,7 +120,7 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
 
   return (
     <Card className="overflow-hidden border border-slate-200">
-      <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+      <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-slate-800">{productName}</h3>
           <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">Número de Médicos</span>
@@ -181,7 +181,7 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
               ))
             )}
           </tbody>
-          <tfoot className="bg-slate-50 font-semibold text-slate-900 border-t border-slate-200">
+          <tfoot className="bg-white font-semibold text-slate-900 border-t border-slate-200">
             <tr>
               <td className="px-4 py-3">Total Geral</td>
               <td className="px-4 py-3">
@@ -273,7 +273,7 @@ export default function VisitacaoXSegmentacao() {
     "GYNOTRAN",
     "GYNPRO",
     "HEMOLIP",
-    "EXELRING",
+    "VIZURIA",
   ];
 
   return (

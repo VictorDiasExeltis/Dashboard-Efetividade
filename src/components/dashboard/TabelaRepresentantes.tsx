@@ -393,25 +393,23 @@ export function TabelaRepresentantes({
               </tr>
             ) : (
               dadosPaginados.map((rep) => (
-                <tr key={rep.codSetor} className={`hover:bg-slate-50/80 transition-colors ${rep.desconsiderado ? 'bg-slate-50/40' : ''}`}>
-                  <td className={`px-4 py-1.5 font-medium whitespace-nowrap ${rep.desconsiderado ? 'text-slate-400/80' : 'text-slate-900'}`}>
+                <tr key={rep.codSetor} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-4 py-1.5 font-medium whitespace-nowrap text-slate-900">
                     {abreviarNome(rep.nomeRep)}
                   </td>
-                  <td className={`px-4 py-1.5 whitespace-nowrap ${rep.desconsiderado ? 'text-slate-400/70' : 'text-slate-600'}`}>
+                  <td className="px-4 py-1.5 whitespace-nowrap text-slate-600">
                     {rep.nomeSetor}
                   </td>
-                  <td className={`px-4 py-1.5 whitespace-nowrap ${rep.desconsiderado ? 'text-slate-400/70' : 'text-slate-600'}`}>
+                  <td className="px-4 py-1.5 whitespace-nowrap text-slate-600">
                     {rep.nomeDistrito}
                   </td>
-                  <td className={`px-4 py-1.5 text-center font-medium ${rep.desconsiderado ? 'text-slate-400/80' : 'text-slate-700'}`}>
+                  <td className="px-4 py-1.5 text-center font-medium text-slate-700">
                     {rep.diasTrabalhados}
                   </td>
                   <td className="px-4 py-1.5 text-center">
                     <span
                       className={
-                        rep.desconsiderado
-                          ? 'text-slate-300 text-xs'
-                          : rep.diasAbonados > 0
+                        rep.diasAbonados > 0
                           ? 'inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200'
                           : 'text-slate-400 text-xs'
                       }

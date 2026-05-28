@@ -39,7 +39,7 @@ export async function getKpisClassificacao(
       : sql``;
 
     const classificacaoWhere = classificacao !== 'Todas'
-      ? sql`AND TRIM(m.classificacao) = ${classificacao}`
+      ? sql`AND TRIM(m.classificacao) IN (${sql.raw(classificacao.split(',').map((c) => `'${c.trim()}'`).join(','))})`
       : sql``;
 
     const result = await db.execute(sql`
@@ -93,7 +93,9 @@ export async function getCoberturaPorSegmentacao(
   try {
     if (!db) return [];
 
-    const dbCiclo = ciclo !== 'Todos' ? normalizeCiclo(ciclo) : ciclo;
+    const dbCiclo = ciclo !== 'Todos'
+      ? ciclo.split(',').map((c) => normalizeCiclo(c.trim())).join(',')
+      : ciclo;
     const hasTerritorio = distrito !== 'Todos' || setor !== 'Todos';
 
     // Quando há filtro de território, restringimos o "painel" do médico via
@@ -116,10 +118,12 @@ export async function getCoberturaPorSegmentacao(
       : sql``;
 
     const classificacaoWhere = classificacao !== 'Todas'
-      ? sql`AND TRIM(m.classificacao) = ${classificacao}`
+      ? sql`AND TRIM(m.classificacao) IN (${sql.raw(classificacao.split(',').map((c) => `'${c.trim()}'`).join(','))})`
       : sql``;
 
-    const cicloWhere = ciclo !== 'Todos' ? sql`AND v.ciclo = ${dbCiclo}` : sql``;
+    const cicloWhere = ciclo !== 'Todos'
+      ? sql`AND v.ciclo IN (${sql.raw(dbCiclo.split(',').map((c) => `'${c.trim()}'`).join(','))})`
+      : sql``;
 
     const result = await db.execute(sql`
       WITH segs AS (
@@ -169,10 +173,20 @@ export async function getSegmentacaoData(
   try {
     if (!db) return [];
 
-    const dbCiclo = ciclo !== 'Todos' ? normalizeCiclo(ciclo) : ciclo;
+    const dbCiclo = ciclo !== 'Todos'
+      ? ciclo.split(',').map((c) => normalizeCiclo(c.trim())).join(',')
+      : ciclo;
 
-    // Fragmentos condicionais — evitam subquery desnecessária quando não há filtro de território
-    const territorioJoin = (distrito !== 'Todos' || setor !== 'Todos')
+    const hasTerritorio = distrito !== 'Todos' || setor !== 'Todos';
+
+    const territorioMedicoJoin = hasTerritorio
+      ? sql`INNER JOIN dim_hierarquia h ON h.cod_setor = m.cod_setor
+            AND TRUE
+            ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
+            ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}`
+      : sql``;
+
+    const territorioJoin = hasTerritorio
       ? sql`AND v.cod_setor IN (
           SELECT h.cod_setor FROM dim_hierarquia h
           WHERE TRUE
@@ -182,22 +196,25 @@ export async function getSegmentacaoData(
       : sql``;
 
     const classificacaoWhere = classificacao !== 'Todas'
-      ? sql`AND TRIM(m.classificacao) = ${classificacao}`
+      ? sql`AND TRIM(m.classificacao) IN (${sql.raw(classificacao.split(',').map((c) => `'${c.trim()}'`).join(','))})`
       : sql``;
 
-    const cicloWhere = ciclo !== 'Todos' ? sql`AND v.ciclo = ${dbCiclo}` : sql``;
+    const cicloWhere = ciclo !== 'Todos'
+      ? sql`AND v.ciclo IN (${sql.raw(dbCiclo.split(',').map((c) => `'${c.trim()}'`).join(','))})`
+      : sql``;
 
     const resultRaw = await db.execute(sql`
       SELECT
-        s.segmentacao as label,
-        COUNT(DISTINCT s.crmuf)::integer    as total_medicos,
+        COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO') as label,
+        COUNT(DISTINCT m.crmuf)::integer    as total_medicos,
         COUNT(DISTINCT v.crmuf)::integer    as medicos_visitados
-      FROM fato_segmentacao s
-      INNER JOIN dim_medicos m ON m.crmuf = s.crmuf AND m.status = TRUE
-      LEFT JOIN fato_visitas v ON v.crmuf = s.crmuf ${territorioJoin} ${cicloWhere}
-      WHERE s.id_marca = ${marcaId}
+      FROM dim_medicos m
+      ${territorioMedicoJoin}
+      LEFT JOIN fato_segmentacao s ON s.crmuf = m.crmuf AND s.id_marca = ${marcaId}
+      LEFT JOIN fato_visitas v ON v.crmuf = m.crmuf ${territorioJoin} ${cicloWhere}
+      WHERE m.status = TRUE
         ${classificacaoWhere}
-      GROUP BY s.segmentacao
+      GROUP BY COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
     `);
 
     // Process the result
@@ -209,7 +226,7 @@ export async function getSegmentacaoData(
        const naoPct = total > 0 ? Math.round((naoNum / total) * 100) + '%' : '0%';
 
        // Handle "SEM SEGMENTAÇÃO" encoding issue
-       const label = (row.label && row.label.startsWith('SEM SEGMENTA')) ? 'SEM SEGMENTAÇÃO' : row.label;
+       const label = (row.label && String(row.label).startsWith('SEM SEGMENTA')) ? 'SEM SEGMENTAÇÃO' : (row.label || 'SEM SEGMENTAÇÃO');
 
        return {
          label: label,

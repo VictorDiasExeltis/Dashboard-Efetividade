@@ -9,13 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/src/components/ui/select';
+import { CustomDropdown } from './CustomDropdown';
 
 import { Filter, X } from 'lucide-react';
 import { Button } from '@/src/components/ui/button';
 import { Card, CardContent } from '@/src/components/ui/card';
 import { getDistritos, getCiclos, getProdutos } from '@/src/app/actions';
 
-const ESTRUTURAS = ['Distrito', 'Setor'];
+const ESTRUTURAS = ['Brasil', 'Distrito', 'Setor'];
 
 // "202605" → "Ciclo 05"
 function formatCiclo(ciclo: string): string {
@@ -51,15 +52,19 @@ export function DashboardFilters({
     [ciclos],
   );
 
-  const currentCiclo      = searchParams.get('ciclo')      || (showCiclo ? ultimoCiclo : 'Todos');
+  const currentCiclo      = searchParams.get('ciclo')      || 'Todos';
   const currentProduto    = searchParams.get('produto')    || 'Todos';
   const currentEstrutura  = searchParams.get('estrutura')  || 'Distrito';
   const currentDistritoRaw = searchParams.get('distrito')  || 'Todos';
   const currentSetor      = searchParams.get('setor')      || 'Todos';
 
   const isSetorMode = currentEstrutura === 'Setor';
+  const isBrasilMode = currentEstrutura === 'Brasil';
   const distritoPadraoSetor = distritos[0] ?? 'Todos';
   const hasActiveFilters = currentEstrutura !== 'Distrito' || currentDistritoRaw !== 'Todos' || currentSetor !== 'Todos';
+
+  const cicloOptions = useMemo(() => ciclos.map(c => ({ label: formatCiclo(c), value: c })), [ciclos]);
+  const produtoOptions = useMemo(() => produtos.map(p => ({ label: p, value: p })), [produtos]);
 
   // Atualiza um único parâmetro na URL
   const updateParam = (key: string, value: string) => {
@@ -86,7 +91,7 @@ export function DashboardFilters({
     router.push(`?${params.toString()}`, { scroll: false });
   };
 
-  const triggerBase = 'h-8 text-sm bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-3 rounded-md border';
+  const triggerBase = 'h-8 text-sm bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-3 rounded-md border [&>span]:block [&>span]:truncate overflow-hidden';
   // Em modo Setor, distrito vira obrigatório (sem opção "Todos").
   const distritoOptions = isSetorMode ? distritos : ['Todos', ...distritos];
 
@@ -95,47 +100,34 @@ export function DashboardFilters({
     <div className="flex flex-row items-center gap-3 w-full">
       {/* Ciclo (opcional) */}
       {showCiclo && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 w-[100px] shrink-0">
           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ciclo</label>
-          <Select value={currentCiclo} onValueChange={(v) => updateParam('ciclo', v)} disabled={!ciclos.length}>
-            <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
-              <SelectValue placeholder={ciclos.length ? undefined : 'Carregando...'} />
-            </SelectTrigger>
-            <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg z-[60]">
-              {ciclos.map((c) => (
-                <SelectItem key={c} value={c} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-                  {formatCiclo(c)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CustomDropdown
+            value={currentCiclo}
+            onChange={(v) => updateParam('ciclo', v)}
+            options={cicloOptions}
+            defaultValue="Todos"
+            disabled={!ciclos.length}
+          />
         </div>
       )}
 
       {/* Produto (opcional) */}
       {showProduto && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 w-[110px] shrink-0">
           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Produto</label>
-          <Select value={currentProduto} onValueChange={(v) => updateParam('produto', v)} disabled={!produtos.length}>
-            <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
-              <SelectValue placeholder={produtos.length ? undefined : 'Carregando...'} />
-            </SelectTrigger>
-            <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg z-[60]">
-              <SelectItem value="Todos" className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-                Todos
-              </SelectItem>
-              {produtos.map((p) => (
-                <SelectItem key={p} value={p} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
-                  {p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CustomDropdown
+            value={currentProduto}
+            onChange={(v) => updateParam('produto', v)}
+            options={produtoOptions}
+            defaultValue="Todos"
+            disabled={!produtos.length}
+          />
         </div>
       )}
 
       {/* Estrutura */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[100px] shrink-0">
         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Estrutura</label>
         <Select value={currentEstrutura} onValueChange={handleEstrutura}>
           <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
@@ -152,12 +144,12 @@ export function DashboardFilters({
       </div>
 
       {/* Distrito */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[120px] shrink-0">
         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
           Distrito{isSetorMode && <span className="ml-1 text-blue-500">*</span>}
         </label>
-        <Select value={currentDistritoRaw} onValueChange={(v) => updateParam('distrito', v)}>
-          <SelectTrigger className={`${triggerBase} ${isSetorMode ? 'border-blue-200 ring-1 ring-blue-100' : 'hover:border-slate-300'}`}>
+        <Select value={isBrasilMode ? 'Todos' : currentDistritoRaw} onValueChange={(v) => updateParam('distrito', v)} disabled={isBrasilMode}>
+          <SelectTrigger className={`${triggerBase} ${isSetorMode ? 'border-blue-200 ring-1 ring-blue-100' : 'hover:border-slate-300'} ${isBrasilMode ? 'opacity-40 cursor-not-allowed' : ''}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg z-[60]">
@@ -171,11 +163,11 @@ export function DashboardFilters({
       </div>
 
       {/* Setor */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-[120px] shrink-0">
         <label className={`text-[10px] font-bold uppercase tracking-wider ${isSetorMode ? 'text-slate-500' : 'text-slate-300'}`}>
           Setor
         </label>
-        <Select value={currentSetor} onValueChange={(v) => updateParam('setor', v)} disabled={!isSetorMode}>
+        <Select value={isBrasilMode ? 'Todos' : currentSetor} onValueChange={(v) => updateParam('setor', v)} disabled={!isSetorMode}>
           <SelectTrigger className={`${triggerBase} ${isSetorMode ? 'hover:border-slate-300' : 'opacity-40 cursor-not-allowed'}`}>
             <SelectValue placeholder={isSetorMode ? 'Todos' : '—'} />
           </SelectTrigger>

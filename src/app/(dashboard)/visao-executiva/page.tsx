@@ -54,9 +54,10 @@ export default function ExecutiveDashboard() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const estrutura = searchParams.get('estrutura') || 'Distrito';
-  const setor     = searchParams.get('setor')     || 'Todos';
+  const setorRaw  = searchParams.get('setor')     || 'Todos';
   const distritoRaw = searchParams.get('distrito') || 'Todos';
-  const distrito  = estrutura === 'Setor' && distritoRaw === 'Todos' ? 'MG/CO' : distritoRaw;
+  const distrito  = estrutura === 'Brasil' ? 'Todos' : (estrutura === 'Setor' && distritoRaw === 'Todos' ? 'MG/CO' : distritoRaw);
+  const setor     = estrutura === 'Brasil' ? 'Todos' : setorRaw;
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);

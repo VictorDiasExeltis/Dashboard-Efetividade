@@ -25,25 +25,22 @@ const CustomLegend = (props: any) => {
   const { payload } = props;
   if (!payload) return null;
   return (
-    <div className="flex justify-end items-center gap-5 text-xs text-slate-500 pb-4">
+    <div className="flex flex-wrap justify-center gap-2 pb-4 select-none">
       {payload.map((entry: any, index: number) => {
         const isMedicos = entry.value === 'Nº de Médicos';
+        const dotStyle = isMedicos
+          ? { background: 'conic-gradient(#0284c7 0 90deg, #059669 90deg 180deg, #d97706 180deg 270deg, #7c3aed 270deg)' }
+          : { backgroundColor: '#0ea5e9' };
         return (
-          <div key={`item-${index}`} className="flex items-center gap-1.5">
-            {isMedicos ? (
-              <span 
-                className="w-2.5 h-2.5 rounded-full inline-block" 
-                style={{ 
-                  background: 'conic-gradient(#3b82f6 0 90deg, #10b981 90deg 180deg, #f97316 180deg 270deg, #8b5cf6 270deg)' 
-                }} 
-              />
-            ) : (
-              <span 
-                className="w-2.5 h-2.5 rounded-full inline-block" 
-                style={{ backgroundColor: '#3b82f6' }} 
-              />
-            )}
-            <span className="text-slate-600 font-medium">{entry.value}</span>
+          <div
+            key={`item-${index}`}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all shadow-sm"
+          >
+            <span
+              className="w-2 h-2 rounded-full inline-block shrink-0"
+              style={dotStyle}
+            />
+            <span>{entry.value}</span>
           </div>
         );
       })}
@@ -68,7 +65,7 @@ const CustomLineLabel = (props: any) => {
         height={height}
         rx={3}
         ry={3}
-        fill="#3b82f6"
+        fill="#0ea5e9"
       />
       <text
         x={x}
@@ -89,22 +86,31 @@ const CHART = {
   grid: '#f1f5f9',
   tick: '#64748b',
   tooltip: { bg: '#ffffff', border: '#e2e8f0', color: '#0f172a' },
-  bar:  '#f97316',  // orange — médicos
-  line: '#3b82f6',  // blue  — média amostras
+  line: '#0ea5e9', // sky-500 — média amostras
 };
 
-const SEG_COLORS: Record<string, string> = {
-  'PROTEGER':        '#3b82f6',
-  'CONQUISTAR':      '#10b981',
-  'MANTER':          '#f97316',
-  'OBSERVAR':        '#8b5cf6',
-  'SEM SEGMENTAÇÃO': '#94a3b8',
+// Gradientes vão de uma cor a outra cor com hue shift sutil (cores vizinhas).
+const SEG_GRADIENTS: Record<string, { id: string; from: string; to: string; solid: string }> = {
+  'PROTEGER':        { id: 'gradProteger',   from: '#3b82f6', to: '#4f46e5', solid: '#3b82f6' }, // blue → indigo
+  'CONQUISTAR':      { id: 'gradConquistar', from: '#10b981', to: '#0d9488', solid: '#059669' }, // emerald → teal
+  'MANTER':          { id: 'gradManter',     from: '#f59e0b', to: '#f97316', solid: '#ea580c' }, // amber → orange
+  'OBSERVAR':        { id: 'gradObservar',   from: '#8b5cf6', to: '#9333ea', solid: '#7c3aed' }, // violet → purple
+  'SEM SEGMENTAÇÃO': { id: 'gradSem',        from: '#64748b', to: '#475569', solid: '#52525b' }, // slate → slate-darker
 };
 
-const PALETTE = ['#3b82f6', '#10b981', '#f97316', '#8b5cf6', '#94a3b8', '#06b6d4', '#ec4899'];
+// Paleta para classificação — mesmas duplas com hue shift sutil.
+const CLASS_GRADIENTS: Array<{ id: string; from: string; to: string; solid: string }> = [
+  { id: 'gradC0', from: '#ec4899', to: '#f43f5e', solid: '#db2777' }, // pink → rose
+  { id: 'gradC1', from: '#3b82f6', to: '#4f46e5', solid: '#3b82f6' }, // blue → indigo
+  { id: 'gradC2', from: '#10b981', to: '#0d9488', solid: '#059669' }, // emerald → teal
+  { id: 'gradC3', from: '#f59e0b', to: '#f97316', solid: '#ea580c' }, // amber → orange
+  { id: 'gradC4', from: '#8b5cf6', to: '#9333ea', solid: '#7c3aed' }, // violet → purple
+  { id: 'gradC5', from: '#06b6d4', to: '#2563eb', solid: '#0ea5e9' }, // cyan → blue
+  { id: 'gradC6', from: '#64748b', to: '#475569', solid: '#52525b' }, // slate → slate-darker
+];
 
-function getSegColor(name: string) {
-  return SEG_COLORS[name] ?? '#94a3b8';
+function getSegGradient(name: string) {
+  return SEG_GRADIENTS[name] ?? SEG_GRADIENTS['SEM SEGMENTAÇÃO'];
 }
 
 function LoadingOverlay() {
@@ -159,7 +165,7 @@ function AlocacaoDeRecursosContent() {
   useEffect(() => {
     setHeaderState({
       title: "Entrega de Amostras",
-      subtitle: "Análise de distribuição de amostras por segmentação e classificação",
+      subtitle: "Análise de distribuição de amostras",
       filters: (
         <Suspense fallback={<div className="h-10 w-40 bg-slate-100 animate-pulse rounded-md" />}>
           <DashboardFilters availableSetores={availableSetores} showCiclo showProduto />
@@ -256,6 +262,14 @@ function AlocacaoDeRecursosContent() {
               {mounted && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={segData} margin={{ top: 20, right: 60, left: 10, bottom: 20 }}>
+                    <defs>
+                      {Object.values(SEG_GRADIENTS).map((g) => (
+                        <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={g.from} stopOpacity={1} />
+                          <stop offset="100%" stopColor={g.to} stopOpacity={1} />
+                        </linearGradient>
+                      ))}
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
                     <XAxis
                       dataKey="segmentacao"
@@ -295,7 +309,7 @@ function AlocacaoDeRecursosContent() {
                         return [num.toFixed(1), name];
                       }}
                     />
-                    <Legend content={<CustomLegend />} />
+                    <Legend content={<CustomLegend />} verticalAlign="top" />
                     <Bar
                       yAxisId="left"
                       dataKey="medicos"
@@ -304,7 +318,7 @@ function AlocacaoDeRecursosContent() {
                       maxBarSize={72}
                     >
                       {segData.map((entry, i) => (
-                        <Cell key={`cell-${i}`} fill={getSegColor(entry.segmentacao)} />
+                        <Cell key={`cell-${i}`} fill={`url(#${getSegGradient(entry.segmentacao).id})`} />
                       ))}
                       <LabelList dataKey="medicos" position="insideBottom" fill="#ffffff" fontSize={12} fontWeight="bold" offset={10} formatter={(v: any) => v.toLocaleString('pt-BR')} />
                     </Bar>
@@ -343,6 +357,14 @@ function AlocacaoDeRecursosContent() {
               {mounted && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={classData} margin={{ top: 20, right: 60, left: 10, bottom: 20 }}>
+                    <defs>
+                      {CLASS_GRADIENTS.map((g) => (
+                        <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={g.from} stopOpacity={1} />
+                          <stop offset="100%" stopColor={g.to} stopOpacity={1} />
+                        </linearGradient>
+                      ))}
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
                     <XAxis
                       dataKey="classificacao"
@@ -382,7 +404,7 @@ function AlocacaoDeRecursosContent() {
                         return [num.toFixed(1), name];
                       }}
                     />
-                    <Legend content={<CustomLegend />} />
+                    <Legend content={<CustomLegend />} verticalAlign="top" />
                     <Bar
                       yAxisId="left"
                       dataKey="medicos"
@@ -391,7 +413,7 @@ function AlocacaoDeRecursosContent() {
                       maxBarSize={72}
                     >
                       {classData.map((_, i) => (
-                        <Cell key={`cell-${i}`} fill={PALETTE[i % PALETTE.length]} />
+                        <Cell key={`cell-${i}`} fill={`url(#${CLASS_GRADIENTS[i % CLASS_GRADIENTS.length].id})`} />
                       ))}
                       <LabelList dataKey="medicos" position="insideBottom" fill="#ffffff" fontSize={12} fontWeight="bold" offset={10} formatter={(v: any) => v.toLocaleString('pt-BR')} />
                     </Bar>

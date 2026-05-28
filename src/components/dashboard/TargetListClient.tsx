@@ -8,7 +8,7 @@ import {
   Stethoscope,
   Users,
   TrendingDown,
-  Coins,
+  Flame,
   Layers,
   ChevronLeft,
   ChevronRight,
@@ -28,11 +28,13 @@ import { useLayout } from '@/src/context/LayoutContext';
 
 const ROWS_PER_PAGE = 12;
 
-const PRODUCT_COLUMNS: Array<{ key: keyof Pick<MedicoNaoVisitado, 'slinda' | 'regenesis' | 'gynpro' | 'gynotran'>; label: string }> = [
+const PRODUCT_COLUMNS: Array<{ key: keyof Pick<MedicoNaoVisitado, 'slinda' | 'regenesis' | 'gynpro' | 'gynotran' | 'hemolip' | 'vizuria'>; label: string }> = [
   { key: 'slinda',    label: 'Slinda' },
   { key: 'regenesis', label: 'Regenesis' },
   { key: 'gynpro',    label: 'Gynpro' },
   { key: 'gynotran',  label: 'Gynotran' },
+  { key: 'hemolip',   label: 'Hemolip' },
+  { key: 'vizuria',   label: 'Vizuria' },
 ];
 
 const SEG_BADGE: Record<string, string> = {
@@ -75,9 +77,48 @@ function formatScoreK(score: number | null | undefined): string {
   return Math.round(score).toString();
 }
 
+// Cor de fundo do badge de potencial. Gradiente do cinza (baixo) ao âmbar (alto).
+const POTENCIAL_BADGE: Record<number, string> = {
+  0: 'bg-slate-100  text-slate-600  border-slate-200',
+  1: 'bg-slate-100  text-slate-700  border-slate-200',
+  2: 'bg-amber-50   text-amber-700  border-amber-200',
+  3: 'bg-amber-100  text-amber-800  border-amber-300',
+  4: 'bg-orange-100 text-orange-700 border-orange-300',
+  5: 'bg-rose-100   text-rose-700   border-rose-300',
+};
+
+function PotencialBadge({ value }: { value: number | null | undefined }) {
+  if (value == null) return <span className="text-slate-300 text-xs">–</span>;
+  const cls = POTENCIAL_BADGE[value] ?? 'bg-slate-100 text-slate-700 border-slate-200';
+  return (
+    <span className={cn(
+      'inline-flex items-center justify-center w-6 h-6 rounded-md border text-xs font-semibold tabular-nums',
+      cls,
+    )}>
+      {value}
+    </span>
+  );
+}
+
 function splitCrmUf(crmuf: string): { uf: string; crm: string } {
   if (!crmuf || crmuf.length < 3) return { uf: '', crm: crmuf || '' };
   return { uf: crmuf.slice(0, 2), crm: crmuf.slice(2) };
+}
+
+// Abrevia nomes do meio: "JOAO PEDRO DA SILVA SANTOS" → "JOAO P. DA S. SANTOS".
+// Mantém primeiro e último nome inteiros, preserva conectivos (DA/DE/DO/DOS/DAS/E)
+// e reduz os demais tokens internos à inicial seguida de ponto.
+const NAME_CONNECTIVES = new Set(['DA', 'DE', 'DO', 'DAS', 'DOS', 'E']);
+
+function abreviaNomeMeio(nome: string): string {
+  if (!nome) return '';
+  const partes = nome.trim().split(/\s+/);
+  if (partes.length <= 2) return nome.trim();
+  return partes.map((parte, i) => {
+    if (i === 0 || i === partes.length - 1) return parte;
+    if (NAME_CONNECTIVES.has(parte.toUpperCase())) return parte;
+    return parte.charAt(0).toUpperCase() + '.';
+  }).join(' ');
 }
 
 export function TargetListClient() {
@@ -158,15 +199,17 @@ export function TargetListClient() {
     ? (doctors.length / totalAtivos) * 100
     : 0;
 
-  // Score Exeltis perdido: soma dos scores dos não-visitados. Traduz a lista em
-  // "valor potencial fora do radar" em vez de só contagem de cabeças.
-  const scorePerdido = doctors.reduce((acc, d) => acc + (d.score ?? 0), 0);
+  // Potencial alto abandonado: médicos da lista com potencial 4 ou 5. Foca a
+  // ação no segmento de maior retorno esperado por visita recuperada.
+  const potencialAltoAbandonado = doctors.filter(
+    (d) => d.potencial != null && d.potencial >= 4
+  ).length;
 
   // Multi-marca abandonado: médicos com segmentação ativa em ≥3 das 5 marcas.
   // Generaliza o antigo "PROTEGER sem visita" — qualquer segmentação válida
   // (não-nula e diferente de '-') conta. São os alvos estratégicos de portfólio.
   const multiMarcaAbandonado = doctors.filter((d) => {
-    const segs = [d.slinda, d.regenesis, d.gynpro, d.gynotran, d.hemolip];
+    const segs = [d.slinda, d.regenesis, d.gynpro, d.gynotran, d.hemolip, d.vizuria];
     return segs.filter((s) => s && s !== '-').length >= 3;
   }).length;
 
@@ -192,10 +235,10 @@ export function TargetListClient() {
       bg: "bg-rose-50"
     },
     {
-      title: "Score Exeltis Perdido",
-      value: formatScoreK(scorePerdido),
-      description: "Soma do score dos não-visitados (potencial fora do radar)",
-      icon: Coins,
+      title: "Alto Potencial Abandonado",
+      value: potencialAltoAbandonado.toLocaleString('pt-BR'),
+      description: "Não-visitados com potencial 4 ou 5",
+      icon: Flame,
       color: "text-purple-600",
       bg: "bg-purple-50"
     },
@@ -280,6 +323,7 @@ export function TargetListClient() {
                     <ArrowUpDown className="w-3 h-3" />
                   </div>
                 </th>
+                <th className="px-4 py-3 font-medium text-center">Potencial</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -300,11 +344,14 @@ export function TargetListClient() {
                     <td className="px-4 py-3">
                       <div className="h-6 w-20 bg-slate-200 rounded-full animate-pulse" />
                     </td>
+                    <td className="px-4 py-3">
+                      <div className="h-6 w-6 mx-auto bg-slate-200 rounded animate-pulse" />
+                    </td>
                   </tr>
                 ))
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={PRODUCT_COLUMNS.length + 2} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={PRODUCT_COLUMNS.length + 3} className="px-4 py-12 text-center text-slate-500">
                     Nenhum médico encontrado com os filtros atuais.
                   </td>
                 </tr>
@@ -314,7 +361,7 @@ export function TargetListClient() {
                   return (
                     <tr key={doc.crmuf} className="group transition-colors hover:bg-slate-50/80">
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-900">{doc.nome_medico}</div>
+                        <div className="font-semibold text-slate-900" title={doc.nome_medico}>{abreviaNomeMeio(doc.nome_medico)}</div>
                         <div className="text-xs text-slate-500 font-medium mt-0.5">
                           {uf}{doc.especialidade ? <span className="text-slate-400"> – {doc.especialidade}</span> : null}
                         </div>
@@ -333,6 +380,9 @@ export function TargetListClient() {
                             {formatScoreK(doc.score)}
                           </div>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <PotencialBadge value={doc.potencial} />
                       </td>
                     </tr>
                   );

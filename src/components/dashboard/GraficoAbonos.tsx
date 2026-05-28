@@ -6,7 +6,6 @@ import {
   Pie,
   Cell,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
@@ -24,18 +23,21 @@ import {
 interface AbonoMotivo {
   name: string;
   value: number; // dias (horas / 8)
-  color: string;
+  color: string;       // cor sólida (legenda/tooltip)
+  gradientId: string;  // id do <linearGradient> usado no slice da rosca
 }
 
 // ─── Constantes visuais ──────────────────────────────────────
 
-const DONUT_COLORS = [
-  '#3b82f6', // blue-500
-  '#f97316', // orange-500
-  '#10b981', // emerald-500
-  '#ef4444', // red-500
-  '#8b5cf6', // violet-500
-  '#06b6d4', // cyan-500
+// Cada slice da rosca usa um gradiente sutil entre cores vizinhas no espectro.
+// `solid` é o tom usado em legenda/tooltip (onde gradiente SVG não se aplica).
+const DONUT_GRADIENTS: Array<{ id: string; from: string; to: string; solid: string }> = [
+  { id: 'gradD0', from: '#3b82f6', to: '#4f46e5', solid: '#3b82f6' }, // blue → indigo
+  { id: 'gradD1', from: '#f59e0b', to: '#f97316', solid: '#ea580c' }, // amber → orange
+  { id: 'gradD2', from: '#10b981', to: '#0d9488', solid: '#059669' }, // emerald → teal
+  { id: 'gradD3', from: '#ef4444', to: '#e11d48', solid: '#dc2626' }, // red → rose
+  { id: 'gradD4', from: '#8b5cf6', to: '#9333ea', solid: '#7c3aed' }, // violet → purple
+  { id: 'gradD5', from: '#06b6d4', to: '#2563eb', solid: '#0ea5e9' }, // cyan → blue
 ];
 
 const TOOLTIP_STYLE = {
@@ -132,16 +134,20 @@ function CustomLegend({ payload }: any) {
       {payload.map((entry: any, index: number) => (
         <div
           key={`legend-${index}`}
+          title={entry.value}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             fontSize: '13px',
             color: '#475569',
+            maxWidth: '140px',
+            minWidth: 0,
           }}
         >
           <span
             style={{
+              flexShrink: 0,
               display: 'inline-block',
               width: '8px',
               height: '8px',
@@ -149,7 +155,16 @@ function CustomLegend({ payload }: any) {
               backgroundColor: entry.color,
             }}
           />
-          {entry.value}
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+          >
+            {entry.value}
+          </span>
         </div>
       ))}
     </div>
@@ -254,10 +269,14 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
         }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 6)
-        .map((item, index) => ({
-          ...item,
-          color: DONUT_COLORS[index % DONUT_COLORS.length],
-        }));
+        .map((item, index) => {
+          const g = DONUT_GRADIENTS[index % DONUT_GRADIENTS.length];
+          return {
+            ...item,
+            color:      g.solid,
+            gradientId: g.id,
+          };
+        });
 
       const total = sorted.reduce((acc, item) => acc + item.value, 0);
       setTotalDias(Math.round(total * 10) / 10);
@@ -374,68 +393,60 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[400px] w-full mt-4 flex items-center justify-center relative">
-          {mounted && (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={dados}
-                  cx="50%"
-                  cy="55%"
-                  innerRadius={65}
-                  outerRadius={95}
-                  paddingAngle={3}
-                  dataKey="value"
-                  label={renderCustomLabel}
-                  labelLine={false}
-                  strokeWidth={0}
-                >
-                  {dados.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.color}
-                      style={{
-                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
-                        cursor: 'pointer',
-                      }}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  verticalAlign="top"
-                  align="center"
-                  content={<CustomLegend />}
-                />
-                {/* Center Label */}
-                <text
-                  x="50%"
-                  y="62%"
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                >
-                  <tspan
-                    x="50%"
-                    dy="-8"
-                    fontSize="22"
-                    fontWeight="700"
-                    fill="#0f172a"
-                  >
+        <div className="mt-4">
+          <CustomLegend
+            payload={dados.map((d) => ({ color: d.color, value: d.name }))}
+          />
+          <div className="h-[340px] w-full relative">
+            {mounted && (
+              <>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <defs>
+                      {DONUT_GRADIENTS.map((g) => (
+                        <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={g.from} stopOpacity={1} />
+                          <stop offset="100%" stopColor={g.to} stopOpacity={1} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <Pie
+                      data={dados}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={95}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={renderCustomLabel}
+                      labelLine={false}
+                      strokeWidth={0}
+                    >
+                      {dados.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={`url(#${entry.gradientId})`}
+                          style={{
+                            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
+                            cursor: 'pointer',
+                          }}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 50 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0">
+                  <span className="text-[22px] font-bold text-slate-900 leading-none">
                     {totalDias.toFixed(1)}
-                  </tspan>
-                  <tspan
-                    x="50%"
-                    dy="18"
-                    fontSize="10"
-                    fontWeight="500"
-                    fill="#94a3b8"
-                  >
+                  </span>
+                  <span className="text-[10px] font-medium text-slate-400 mt-1">
                     dias totais
-                  </tspan>
-                </text>
-              </PieChart>
-            </ResponsiveContainer>
-          )}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

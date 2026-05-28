@@ -14,7 +14,7 @@ interface TopbarProps {
 export function Topbar({ onMenuClick, title, subtitle, filters }: TopbarProps) {
   return (
     <header className="h-[102px] bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
-      <div className="flex items-center flex-1 gap-4 overflow-hidden h-full">
+      <div className="flex items-center flex-1 gap-4 h-full">
         <button
           onClick={onMenuClick}
           className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-800 rounded-md hover:bg-slate-100"
