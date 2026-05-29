@@ -6,16 +6,20 @@ import { sql } from 'drizzle-orm';
 export async function getExecutiveMetrics(
   distrito: string = 'Todos',
   estrutura: string = 'Distrito',
-  setor: string = 'Todos'
+  setor: string = 'Todos',
+  ciclos: string[] = []
 ) {
   try {
     if (!db) {
       throw new Error("Database not connected");
     }
 
-    // KPIs vêm da RPC get_executive_kpis (cobertura, mdv, visitas totais, etc.)
+    // RPC aceita p_ciclos como CSV ("202604,202605"). Vazio = NULL pro driver,
+    // a função trata como "último ciclo". O CSV evita o achatamento do array
+    // unitário que o postgres-js faz quando passamos string[] direto.
+    const ciclosParam = ciclos.length > 0 ? ciclos.join(',') : null;
     const kpiDataRaw = await db.execute(sql`
-      SELECT get_executive_kpis(${estrutura}, ${distrito}, ${setor}) as data
+      SELECT get_executive_kpis(${estrutura}, ${distrito}, ${setor}, ${ciclosParam}) as data
     `);
     const kpiData = (kpiDataRaw[0] as any).data ?? {};
 

@@ -30,6 +30,8 @@ export async function getMedicosNaoVisitados(
         m.score,
         m.potencial,
         m.especialidade,
+        h_med.nome_setor    AS nome_setor,
+        h_med.nome_distrito AS nome_distrito,
         MAX(CASE WHEN s.id_marca = 10005 THEN s.segmentacao END) AS slinda,
         MAX(CASE WHEN s.id_marca = 10004 THEN s.segmentacao END) AS regenesis,
         MAX(CASE WHEN s.id_marca = 10002 THEN s.segmentacao END) AS gynpro,
@@ -37,6 +39,7 @@ export async function getMedicosNaoVisitados(
         MAX(CASE WHEN s.id_marca = 10003 THEN s.segmentacao END) AS hemolip,
         MAX(CASE WHEN s.id_marca = 10007 THEN s.segmentacao END) AS vizuria
       FROM dim_medicos m
+      LEFT JOIN dim_hierarquia h_med ON h_med.cod_setor = m.cod_setor
       LEFT JOIN fato_segmentacao s ON s.crmuf = m.crmuf
       WHERE m.status = TRUE
         -- Sem visita nos 3 ciclos mais recentes (janela de "abandono")
@@ -58,7 +61,7 @@ export async function getMedicosNaoVisitados(
           )
         ))
         ${territorioExists}
-      GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score, m.potencial
+      GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score, m.potencial, h_med.nome_setor, h_med.nome_distrito
       ORDER BY m.score DESC NULLS LAST, m.nome_medico
     `);
 
@@ -75,6 +78,8 @@ export async function getMedicosNaoVisitados(
       hemolip:       r.hemolip       ?? null,
       vizuria:       r.vizuria       ?? null,
       especialidade: r.especialidade ?? null,
+      nome_setor:    r.nome_setor    ?? null,
+      nome_distrito: r.nome_distrito ?? null,
     }));
   } catch (e) {
     console.error('getMedicosNaoVisitados error:', e);

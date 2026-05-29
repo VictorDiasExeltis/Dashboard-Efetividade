@@ -63,17 +63,18 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
   const urlParams = useSearchParams();
   const filtroDistrito = urlParams.get('distrito') || 'Todos';
   const filtroSetor = urlParams.get('setor') || 'Todos';
+  // Ciclo agora vive na URL (CSV via Ctrl+clique no DashboardFilters), permitindo
+  // que o gráfico de rosca, a tabela e os gráficos de Cobertura/MDV compartilhem
+  // a mesma fonte. "Todos" = sem param na URL.
+  const filtroCiclo = urlParams.get('ciclo') || 'Todos';
 
-  // Estado compartilhado entre o donut de abonos e a tabela de representantes.
-  // O seletor de ciclo vive dentro da tabela (já existia) e propaga pra cá via onCicloChange.
-  const [filtroCicloAbonos, setFiltroCicloAbonos] = React.useState('Todos');
   React.useEffect(() => {
     setHeaderState({
       title: "Cobertura e Média de Visitação",
-      subtitle: "Resumo de performance operacional e cobertura de mercado",
+      subtitle: "Resumo de performance de visitação",
       filters: (
         <React.Suspense fallback={<div className="h-10 w-40 bg-slate-100 animate-pulse rounded-md" />}>
-          <DashboardFilters availableSetores={data.availableSetores} />
+          <DashboardFilters availableSetores={data.availableSetores} showCiclo />
         </React.Suspense>
       )
     });
@@ -81,50 +82,62 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
     return () => setHeaderState({});
   }, [data.availableSetores, setHeaderState]);
 
+  // Quando o ciclo anterior não existe (ex.: usuário filtrou só o Ciclo 01),
+  // a comparação "vs ciclo anterior" perde sentido — escondemos o trend.
+  const temCicloAnterior = Boolean(kpis.prev_ciclo);
+
   const kpiCards = [
     {
       title: `Cobertura de Visitação`,
       value: `${Number(kpis.selected.cobertura).toFixed(1)}%`,
       description: `Média Brasil: ${Number(kpis.brasilSelected?.cobertura || 0).toFixed(1)}%`,
-      trend: `${kpis.trend?.cobertura >= 0 ? '+' : ''}${Number(kpis.trend?.cobertura || 0).toFixed(1)} pp vs ciclo anterior`,
+      trend: temCicloAnterior
+        ? `${kpis.trend?.cobertura >= 0 ? '+' : ''}${Number(kpis.trend?.cobertura || 0).toFixed(1)} pp vs ciclo anterior`
+        : '',
       trendType: (kpis.trend?.cobertura || 0) >= 0 ? 'up' : 'down',
       icon: TrendingUp,
       color: "text-blue-600",
       bg: "bg-blue-50",
-      tooltip: "Proporção de médicos visitados em relação ao total planejado (painel) no período selecionado."
+      tooltip: "Porcentagem de médicos visitados em relação ao número de médicos do painel."
     },
     {
-      title: "MVD (Média Visita Diária)",
+      title: "Média Diária de Visitas",
       value: Number(kpis.selected.mdv).toFixed(1),
       description: `Média Brasil: ${Number(kpis.brasilSelected?.mdv || 0).toFixed(1)}`,
-      trend: `${kpis.trend?.mdv >= 0 ? '+' : ''}${Number(kpis.trend?.mdv || 0).toFixed(1)} vs ciclo anterior`,
+      trend: temCicloAnterior
+        ? `${kpis.trend?.mdv >= 0 ? '+' : ''}${Number(kpis.trend?.mdv || 0).toFixed(1)} vs ciclo anterior`
+        : '',
       trendType: (kpis.trend?.mdv || 0) >= 0 ? 'up' : 'down',
       icon: Users,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
-      tooltip: "Média de visitas por dia útil trabalhado, dividindo o total de visitas pelos dias trabalhados declarados no período."
+      tooltip: "Média de visitas por dia útil trabalhado no período selecionado."
     },
     {
       title: "Visitas Totais",
       value: Number(kpis.selected.visitasTotais).toLocaleString('pt-BR'),
       description: "Total do ciclo atual",
-      trend: `${kpis.trend?.visitasTotais >= 0 ? '+' : ''}${Number(kpis.trend?.visitasTotais || 0).toLocaleString('pt-BR')} vs ciclo anterior`,
+      trend: temCicloAnterior
+        ? `${kpis.trend?.visitasTotais >= 0 ? '+' : ''}${Number(kpis.trend?.visitasTotais || 0).toLocaleString('pt-BR')} vs ciclo anterior`
+        : '',
       trendType: (kpis.trend?.visitasTotais || 0) >= 0 ? 'up' : 'down',
       icon: Package,
       color: "text-amber-600",
       bg: "bg-amber-50",
-      tooltip: "Quantidade absoluta de contatos promocionais e visitas (presenciais ou remotas) no ciclo corrente."
+      tooltip: "Número total de visitas realizadas no período selecionado."
     },
     {
-      title: "Contatos (Médicos)",
+      title: "Visitas Únicas",
       value: Number(kpis.selected.contatos).toLocaleString('pt-BR'),
-      description: "Visitas únicas no ciclo atual",
-      trend: `${kpis.trend?.contatos >= 0 ? '+' : ''}${Number(kpis.trend?.contatos || 0).toLocaleString('pt-BR')} vs ciclo anterior`,
+      description: "Médicos distintos no ciclo atual",
+      trend: temCicloAnterior
+        ? `${kpis.trend?.contatos >= 0 ? '+' : ''}${Number(kpis.trend?.contatos || 0).toLocaleString('pt-BR')} vs ciclo anterior`
+        : '',
       trendType: (kpis.trend?.contatos || 0) >= 0 ? 'up' : 'down',
       icon: Users,
       color: "text-slate-600",
       bg: "bg-slate-100",
-      tooltip: "Total de médicos distintos que receberam pelo menos uma visita no ciclo selecionado."
+      tooltip: "Número de visitas únicas realizadas no período selecionado."
     }
   ];
 
@@ -135,15 +148,26 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
         <div className="flex items-center gap-2 text-slate-500">
           <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
           <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            Dados: Todos os Ciclos
+            {(() => {
+              const selected: string[] | undefined = (kpis as any).selected_ciclos;
+              const last: string | undefined = kpis.last_ciclo;
+              const fmt = (c: string) => `Ciclo ${c.slice(-2)}`;
+              if (filtroCiclo === 'Todos' || !filtroCiclo) {
+                return `Dados: ${last ? fmt(last) : 'último ciclo'}`;
+              }
+              const lista = selected && selected.length > 0
+                ? selected
+                : filtroCiclo.split(',').filter(Boolean);
+              return `Dados: ${lista.map(fmt).join(', ')}`;
+            })()}
           </p>
         </div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((kpi) => (
-          <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white overflow-hidden">
+        {kpiCards.map((kpi, idx) => (
+          <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className={`p-2 rounded-lg ${kpi.bg}`}>
@@ -157,14 +181,17 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
                 )}
               </div>
               <div className="space-y-1">
-                <div className="flex items-center gap-1 group relative">
+                <div className="flex items-center gap-1">
                   <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
-                  <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
-                  
-                  {/* Tooltip Popup */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none">
-                    {kpi.tooltip}
-                  </div>
+                  <span className="group relative inline-flex">
+                    <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
+                    {/* Tooltip: primeiro card cresce pra direita (pra não
+                        bater na sidebar); demais alinham à direita e crescem
+                        pra esquerda. */}
+                    <div className={`absolute bottom-full ${idx === 0 ? 'left-0' : 'right-0'} mb-2 hidden group-hover:block w-max max-w-[220px] p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none whitespace-normal`}>
+                      {kpi.tooltip}
+                    </div>
+                  </span>
                 </div>
                 <h3 className="text-2xl font-bold text-slate-900">{kpi.value}</h3>
                 <p className="text-xs text-slate-400">{kpi.description}</p>
@@ -191,13 +218,12 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
             <GraficoAbonos
               filtroDistrito={filtroDistrito}
               filtroSetor={filtroSetor}
-              filtroCiclo={filtroCicloAbonos}
+              filtroCiclo={filtroCiclo}
             />
             <TabelaRepresentantes
               filtroDistrito={filtroDistrito}
               filtroSetor={filtroSetor}
-              filtroCiclo={filtroCicloAbonos}
-              onCicloChange={setFiltroCicloAbonos}
+              filtroCiclo={filtroCiclo}
             />
           </div>
         </section>

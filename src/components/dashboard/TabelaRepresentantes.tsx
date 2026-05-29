@@ -54,17 +54,12 @@ interface RepresentanteProcessado {
 interface TabelaRepresentantesProps {
   filtroDistrito?: string;
   filtroSetor?: string;
+  // CSV de ciclos vindos do header global ("202604" ou "202604,202605").
+  // "Todos" ou string vazia = sem filtro de ciclo.
   filtroCiclo?: string;
-  onCicloChange?: (ciclo: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
-
-function formatarCiclo(ciclo: string): string {
-  // "202601" → "Ciclo 01"
-  const numCiclo = ciclo.slice(-2);
-  return `Ciclo ${numCiclo.padStart(2, '0')}`;
-}
 
 function formatarDiasAbonados(value: number): string {
   if (value === 0) return '0';
@@ -97,14 +92,19 @@ function processarDados(
   rows: DimHierarquiaRaw[],
   filtroCiclo: string
 ): RepresentanteProcessado[] {
-  const cicloNormalizado = filtroCiclo === 'Todos' ? 'todos' : filtroCiclo.trim().toLowerCase();
+  // filtroCiclo aceita "Todos", um único ciclo ("202604") ou CSV
+  // ("202604,202605") quando o usuário fez Ctrl+clique no header global.
+  const isTodos = !filtroCiclo || filtroCiclo === 'Todos';
+  const ciclosFiltro = isTodos
+    ? new Set<string>()
+    : new Set(filtroCiclo.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean));
+  const matchCiclo = (ciclo: string | null | undefined) =>
+    isTodos || (ciclo != null && ciclosFiltro.has(ciclo.trim().toLowerCase()));
 
   return rows.map((row) => {
-    const metas = (cicloNormalizado === 'todos'
+    const metas = (isTodos
       ? (row.metas_ciclo ?? [])
-      : (row.metas_ciclo ?? []).filter(
-          (m) => (m.ciclo ?? '').trim().toLowerCase() === cicloNormalizado
-        )
+      : (row.metas_ciclo ?? []).filter((m) => matchCiclo(m.ciclo))
     ).filter((m) => m.considerar === true);
 
     const todosAbonos = row.fato_abonos ?? [];
@@ -119,31 +119,24 @@ function processarDados(
       );
     }
 
-    // Normalização aplicada na comparação (Caso 3): trim + lowercase em ambos os lados
-    const abonos = cicloNormalizado === 'todos'
+    const abonos = isTodos
       ? todosAbonos
-      : todosAbonos.filter((a) => {
-          const cicloAbono = extrairCicloAbono(a);
-          return cicloAbono !== null && cicloAbono.trim().toLowerCase() === cicloNormalizado;
-        });
+      : todosAbonos.filter((a) => matchCiclo(extrairCicloAbono(a)));
 
     const diasTrabalhados = metas.reduce((acc, m) => acc + (m.dias_trabalhados ?? 0), 0);
     const totalHoras = abonos.reduce((acc, a) => acc + (a.horas_abonadas ?? 0), 0);
     const diasAbonados = Math.round((totalHoras / 8) * 10) / 10;
 
     let desconsiderado = false;
-    if (cicloNormalizado !== 'todos') {
-      const metaCicloEspecifico = (row.metas_ciclo ?? []).find(
-        (m) => (m.ciclo ?? '').trim().toLowerCase() === cicloNormalizado
+    if (!isTodos) {
+      // Desconsidera quando NENHUM dos ciclos selecionados tem meta ativa.
+      const algumaMetaAtiva = (row.metas_ciclo ?? []).some(
+        (m) => matchCiclo(m.ciclo) && m.considerar === true,
       );
-      if (!metaCicloEspecifico || metaCicloEspecifico.considerar === false) {
-        desconsiderado = true;
-      }
+      if (!algumaMetaAtiva) desconsiderado = true;
     } else {
       const temMetasAtivas = (row.metas_ciclo ?? []).some((m) => m.considerar === true);
-      if (!temMetasAtivas) {
-        desconsiderado = true;
-      }
+      if (!temMetasAtivas) desconsiderado = true;
     }
 
     return {
@@ -180,20 +173,11 @@ function SkeletonRow() {
 export function TabelaRepresentantes({
   filtroDistrito,
   filtroSetor,
-  filtroCiclo: filtroCicloProp,
-  onCicloChange,
+  filtroCiclo = 'Todos',
 }: TabelaRepresentantesProps) {
   const [rawDados, setRawDados] = useState<DimHierarquiaRaw[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Modo controlado: se o parent passa filtroCiclo + onCicloChange, usa essa fonte.
-  // Caso contrário cai pra state interno (mantém retrocompat).
-  const isControlled = filtroCicloProp !== undefined && onCicloChange !== undefined;
-  const [filtroCicloInterno, setFiltroCicloInterno] = useState('Todos');
-  const filtroCiclo = isControlled ? filtroCicloProp! : filtroCicloInterno;
-  const setFiltroCiclo = isControlled ? onCicloChange! : setFiltroCicloInterno;
-
   const [pagina, setPagina] = useState(1);
 
   // ─── Fetch ────────────────────────────────────────────────
@@ -243,22 +227,6 @@ export function TabelaRepresentantes({
 
   // ─── Derivações (memoizadas) ──────────────────────────────
 
-  const ciclosUnicos = useMemo(() => {
-    const deMetas = rawDados.flatMap((r) =>
-      (r.metas_ciclo ?? []).map((m) => m.ciclo).filter((c): c is string => c !== null)
-    );
-    const deAbonos = rawDados.flatMap((r) =>
-      (r.fato_abonos ?? [])
-        .map((a) => extrairCicloAbono(a))
-        .filter((c): c is string => c !== null)
-    );
-    // Remove o ciclo "00" (representa dias não úteis e não deve aparecer no filtro)
-    const todosCiclos = Array.from(new Set([...deMetas, ...deAbonos]))
-      .filter((c) => !c.endsWith('00'))
-      .sort();
-    return ['Todos', ...todosCiclos];
-  }, [rawDados]);
-
   const dadosFiltrados = useMemo(
     () => processarDados(rawDados, filtroCiclo),
     [rawDados, filtroCiclo]
@@ -276,33 +244,14 @@ export function TabelaRepresentantes({
 
   const cabecalho = (
     <CardHeader className="border-b border-slate-200 bg-slate-50/50 py-4 px-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <Users className="h-4 w-4 text-blue-600" />
-            Detalhamento por Representante
-          </CardTitle>
-          <CardDescription className="text-slate-500 mt-0.5 text-xs">
-            Dias trabalhados e abonados no período
-            {filtroDistrito && filtroDistrito !== 'Todos' ? ` — ${filtroDistrito}` : ''}
-          </CardDescription>
-        </div>
-
-        {!loading && !error && (
-          <select
-            value={filtroCiclo}
-            onChange={(e) => setFiltroCiclo(e.target.value)}
-            className="text-xs border border-slate-200 rounded-md px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shrink-0"
-            aria-label="Filtrar por ciclo"
-          >
-            {ciclosUnicos.map((c) => (
-              <option key={c} value={c}>
-                {c === 'Todos' ? 'Todos os Ciclos' : formatarCiclo(c)}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
+      <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+        <Users className="h-4 w-4 text-blue-600" />
+        Detalhamento por Representante
+      </CardTitle>
+      <CardDescription className="text-slate-500 mt-0.5 text-xs">
+        Dias trabalhados e abonados no período
+        {filtroDistrito && filtroDistrito !== 'Todos' ? ` — ${filtroDistrito}` : ''}
+      </CardDescription>
     </CardHeader>
   );
 

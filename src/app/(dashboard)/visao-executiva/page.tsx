@@ -58,12 +58,17 @@ export default function ExecutiveDashboard() {
   const distritoRaw = searchParams.get('distrito') || 'Todos';
   const distrito  = estrutura === 'Brasil' ? 'Todos' : (estrutura === 'Setor' && distritoRaw === 'Todos' ? 'MG/CO' : distritoRaw);
   const setor     = estrutura === 'Brasil' ? 'Todos' : setorRaw;
+  // Filtro de ciclo (CSV via Ctrl+clique no header). Vazio = sem filtro,
+  // a RPC volta a tratar como "último ciclo".
+  const cicloParam = searchParams.get('ciclo') || '';
+  const ciclos = cicloParam ? cicloParam.split(',').map((c) => c.trim()).filter(Boolean) : [];
+  const ciclosKey = ciclos.join('|');
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const result = await getExecutiveMetrics(distrito, estrutura, setor);
+      const result = await getExecutiveMetrics(distrito, estrutura, setor, ciclos);
       setData(result);
     } catch (err) {
       console.error('Erro ao buscar métricas:', err);
@@ -71,7 +76,8 @@ export default function ExecutiveDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [distrito, estrutura, setor]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distrito, estrutura, setor, ciclosKey]);
 
   useEffect(() => {
     fetchData();

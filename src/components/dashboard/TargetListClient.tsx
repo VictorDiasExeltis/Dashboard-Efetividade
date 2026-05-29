@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import {
   Search,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Stethoscope,
   Users,
   TrendingDown,
@@ -13,7 +15,9 @@ import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
+  Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { cn } from '@/src/lib/utils';
 import { Input } from '@/src/components/ui/input';
 import { Button } from '@/src/components/ui/button';
@@ -28,6 +32,68 @@ import {
 import { useLayout } from '@/src/context/LayoutContext';
 
 const ROWS_PER_PAGE = 12;
+
+// Chaves de ordenação aceitas pelo header da tabela. As marcas reaproveitam
+// a chave do PRODUCT_COLUMNS (slinda, regenesis...) e ordenam pela "ranking"
+// de segmentação (PROTEGER = 1, melhor; nulos vão pro fim).
+type SortKey =
+  | 'nome'
+  | 'score'
+  | 'potencial'
+  | 'slinda'
+  | 'regenesis'
+  | 'gynpro'
+  | 'gynotran'
+  | 'hemolip'
+  | 'vizuria';
+type SortDir = 'asc' | 'desc';
+
+const SEGMENTACAO_RANK: Record<string, number> = {
+  PROTEGER: 1,
+  CONQUISTAR: 2,
+  MANTER: 3,
+  OBSERVAR: 4,
+};
+
+function segRank(value: string | null | undefined): number {
+  if (!value || value === '-') return 99;
+  return SEGMENTACAO_RANK[value.toUpperCase()] ?? 50;
+}
+
+// Header clicável usado em cada coluna ordenável. Mostra ArrowUpDown quando
+// inativo; ArrowUp/ArrowDown quando ativo, refletindo a direção.
+function SortHeader({
+  label,
+  myKey,
+  sortKey,
+  sortDir,
+  onClick,
+  align = 'left',
+}: {
+  label: string;
+  myKey: SortKey;
+  sortKey: SortKey | null;
+  sortDir: SortDir;
+  onClick: (key: SortKey) => void;
+  align?: 'left' | 'center';
+}) {
+  const active = sortKey === myKey;
+  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(myKey)}
+      className={cn(
+        'inline-flex items-center gap-1 hover:text-slate-900 transition-colors',
+        active && 'text-slate-900',
+        align === 'center' && 'mx-auto',
+      )}
+    >
+      {label}
+      <Icon className={cn('w-3 h-3', active ? 'opacity-90' : 'opacity-50')} />
+    </button>
+  );
+}
 
 const PRODUCT_COLUMNS: Array<{ key: keyof Pick<MedicoNaoVisitado, 'slinda' | 'regenesis' | 'gynpro' | 'gynotran' | 'hemolip' | 'vizuria'>; label: string }> = [
   { key: 'slinda',    label: 'Slinda' },
@@ -78,14 +144,15 @@ function formatScoreK(score: number | null | undefined): string {
   return Math.round(score).toString();
 }
 
-// Cor de fundo do badge de potencial. Gradiente do cinza (baixo) ao âmbar (alto).
+// Escala de potencial: 1 = MAIOR potencial, 5 = MENOR potencial.
+// Badge vai do rosa intenso (1) ao cinza (5).
 const POTENCIAL_BADGE: Record<number, string> = {
-  0: 'bg-slate-100  text-slate-600  border-slate-200',
-  1: 'bg-slate-100  text-slate-700  border-slate-200',
-  2: 'bg-amber-50   text-amber-700  border-amber-200',
+  1: 'bg-rose-100   text-rose-700   border-rose-300',
+  2: 'bg-orange-100 text-orange-700 border-orange-300',
   3: 'bg-amber-100  text-amber-800  border-amber-300',
-  4: 'bg-orange-100 text-orange-700 border-orange-300',
-  5: 'bg-rose-100   text-rose-700   border-rose-300',
+  4: 'bg-amber-50   text-amber-700  border-amber-200',
+  5: 'bg-slate-100  text-slate-700  border-slate-200',
+  0: 'bg-slate-100  text-slate-600  border-slate-200',
 };
 
 function PotencialBadge({ value }: { value: number | null | undefined }) {
@@ -99,11 +166,6 @@ function PotencialBadge({ value }: { value: number | null | undefined }) {
       {value}
     </span>
   );
-}
-
-function splitCrmUf(crmuf: string): { uf: string; crm: string } {
-  if (!crmuf || crmuf.length < 3) return { uf: '', crm: crmuf || '' };
-  return { uf: crmuf.slice(0, 2), crm: crmuf.slice(2) };
 }
 
 // Abrevia nomes do meio: "JOAO PEDRO DA SILVA SANTOS" → "JOAO P. DA S. SANTOS".
@@ -129,6 +191,8 @@ export function TargetListClient() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [availableSetores, setAvailableSetores] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const searchParams = useSearchParams();
   const estrutura   = searchParams.get('estrutura') || 'Distrito';
@@ -188,10 +252,76 @@ export function TargetListClient() {
     );
   }, [doctors, searchTerm]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredDoctors.length / ROWS_PER_PAGE));
+  // Ordenação client-side. Quando sortKey é null, mantém a ordem default do
+  // server (score DESC NULLS LAST, nome_medico).
+  const sortedDoctors = useMemo(() => {
+    if (!sortKey) return filteredDoctors;
+    const sign = sortDir === 'asc' ? 1 : -1;
+    const arr = [...filteredDoctors];
+    arr.sort((a, b) => {
+      if (sortKey === 'nome') {
+        return (a.nome_medico ?? '').localeCompare(b.nome_medico ?? '', 'pt-BR') * sign;
+      }
+      if (sortKey === 'score') {
+        const va = a.score ?? Number.NEGATIVE_INFINITY;
+        const vb = b.score ?? Number.NEGATIVE_INFINITY;
+        return (va - vb) * sign;
+      }
+      if (sortKey === 'potencial') {
+        // potencial: 1 = maior, 5 = menor. null vai pro fim independente da direção.
+        const va = a.potencial ?? 99;
+        const vb = b.potencial ?? 99;
+        return (va - vb) * sign;
+      }
+      // Coluna de marca: usa o ranking da segmentação. asc = melhores antes
+      // (PROTEGER); desc = piores antes.
+      const va = segRank(a[sortKey] as string | null);
+      const vb = segRank(b[sortKey] as string | null);
+      return (va - vb) * sign;
+    });
+    return arr;
+  }, [filteredDoctors, sortKey, sortDir]);
+
+  // Clique no header: toggle direção se mesma coluna; senão escolhe um default
+  // sensato pra cada tipo (asc pra "melhor" naturalmente nessa escala).
+  function handleSortClick(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(key === 'nome' ? 'asc' : key === 'score' ? 'desc' : 'asc');
+  }
+
+  // Reset paginação quando sort muda
+  useEffect(() => { setPage(1); }, [sortKey, sortDir]);
+
+  // Exporta a lista atual (após filtro + ordenação) pra .xlsx.
+  function handleExport() {
+    const rows = sortedDoctors.map((d) => ({
+      Nome:           d.nome_medico,
+      CRMUF:          d.crmuf,
+      Setor:          d.nome_setor ?? '',
+      Distrito:       d.nome_distrito ?? '',
+      Slinda:         d.slinda     ?? '',
+      Regenesis:      d.regenesis  ?? '',
+      Gynpro:         d.gynpro     ?? '',
+      Gynotran:       d.gynotran   ?? '',
+      Hemolip:        d.hemolip    ?? '',
+      Vizuria:        d.vizuria    ?? '',
+      Potencial:      d.potencial ?? '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Médicos não Visitados');
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `medicos-nao-visitados_${today}.xlsx`);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(sortedDoctors.length / ROWS_PER_PAGE));
   const safePage   = Math.min(page, totalPages);
   const startIdx   = (safePage - 1) * ROWS_PER_PAGE;
-  const pageRows   = filteredDoctors.slice(startIdx, startIdx + ROWS_PER_PAGE);
+  const pageRows   = sortedDoctors.slice(startIdx, startIdx + ROWS_PER_PAGE);
 
   // Taxa de abandono: % de médicos ativos do território sem visita nos últimos
   // 3 ciclos. Denominador é o total de ativos vinculados ao território (mesma
@@ -200,16 +330,17 @@ export function TargetListClient() {
     ? (doctors.length / totalAtivos) * 100
     : 0;
 
-  // Potencial alto abandonado: médicos da lista com potencial 4 ou 5. Foca a
-  // ação no segmento de maior retorno esperado por visita recuperada.
-  const potencialAltoAbandonado = doctors.filter(
-    (d) => d.potencial != null && d.potencial >= 4
+  // Potencial alto não visitado: médicos da lista com potencial 1 ou 2 (na
+  // escala, 1 = maior potencial). Foca a ação no segmento de maior retorno
+  // esperado por visita recuperada.
+  const potencialAltoNaoVisitado = doctors.filter(
+    (d) => d.potencial != null && d.potencial >= 1 && d.potencial <= 2
   ).length;
 
-  // Multi-marca abandonado: médicos com segmentação ativa em ≥3 das 5 marcas.
+  // Multi-marca não visitado: médicos com segmentação ativa em ≥3 das 5 marcas.
   // Generaliza o antigo "PROTEGER sem visita" — qualquer segmentação válida
   // (não-nula e diferente de '-') conta. São os alvos estratégicos de portfólio.
-  const multiMarcaAbandonado = doctors.filter((d) => {
+  const multiMarcaNaoVisitado = doctors.filter((d) => {
     const segs = [d.slinda, d.regenesis, d.gynpro, d.gynotran, d.hemolip, d.vizuria];
     return segs.filter((s) => s && s !== '-').length >= 3;
   }).length;
@@ -218,37 +349,37 @@ export function TargetListClient() {
     {
       title: "Total sem Visita",
       value: doctors.length.toLocaleString('pt-BR'),
-      description: "Médicos ativos zerados nos últimos 3 ciclos",
+      description: "Médicos não visitados nos últimos 3 ciclos",
       icon: Users,
       color: "text-slate-600",
       bg: "bg-slate-100",
       tooltip: "Médicos ativos no painel sem visitas registradas nos últimos 3 ciclos."
     },
     {
-      title: "Taxa de Abandono",
+      title: "Médicos não Visitados",
       value: totalAtivos > 0
         ? `${taxaAbandono.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
         : '–',
       description: totalAtivos > 0
-        ? `${doctors.length.toLocaleString('pt-BR')} de ${totalAtivos.toLocaleString('pt-BR')} ativos no território`
-        : 'Sem ativos no território',
+        ? `${doctors.length.toLocaleString('pt-BR')} de ${totalAtivos.toLocaleString('pt-BR')} médicos no painel`
+        : 'Sem médicos no painel',
       icon: TrendingDown,
       color: "text-rose-600",
       bg: "bg-rose-50",
-      tooltip: "Percentual de médicos sem visitas nos últimos 3 ciclos em relação ao total de médicos ativos do território."
+      tooltip: "Percentual de médicos sem visitas nos últimos 3 ciclos em relação ao total de médicos ativos do território. (Desconsiderando médicos incluídos nos últimos 3 ciclos)"
     },
     {
-      title: "Alto Potencial Abandonado",
-      value: potencialAltoAbandonado.toLocaleString('pt-BR'),
-      description: "Não-visitados com potencial 4 ou 5",
+      title: "Alto Potencial Não Visitado",
+      value: potencialAltoNaoVisitado.toLocaleString('pt-BR'),
+      description: "Não-visitados com potencial 1 ou 2",
       icon: Flame,
       color: "text-purple-600",
       bg: "bg-purple-50",
-      tooltip: "Médicos sem visitas nos últimos 3 ciclos com alto potencial de prescrição (potencial 4 ou 5)."
+      tooltip: "Médicos sem visitas nos últimos 3 ciclos com alto potencial de prescrição (potencial 1 ou 2)."
     },
     {
-      title: "Multi-marca Abandonado",
-      value: multiMarcaAbandonado.toLocaleString('pt-BR'),
+      title: "Multi-marca Não Visitado",
+      value: multiMarcaNaoVisitado.toLocaleString('pt-BR'),
       description: "Não-visitados com segmentação ativa em 3+ marcas",
       icon: Layers,
       color: "text-blue-600",
@@ -262,8 +393,8 @@ export function TargetListClient() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((kpi) => (
-          <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white overflow-hidden">
+        {kpiCards.map((kpi, idx) => (
+          <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className={`p-2 rounded-lg ${kpi.bg}`}>
@@ -271,14 +402,16 @@ export function TargetListClient() {
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="flex items-center gap-1 group relative">
+                <div className="flex items-center gap-1">
                   <p className="text-sm font-medium text-slate-500">{kpi.title}</p>
-                  <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
-                  
-                  {/* Tooltip Popup */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none">
-                    {kpi.tooltip}
-                  </div>
+                  <span className="group relative inline-flex">
+                    <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
+                    {/* Tooltip: primeiro card cresce pra direita (pra não
+                        bater na sidebar); demais alinham à direita. */}
+                    <div className={`absolute bottom-full ${idx === 0 ? 'left-0' : 'right-0'} mb-2 hidden group-hover:block w-max max-w-[220px] p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none whitespace-normal`}>
+                      {kpi.tooltip}
+                    </div>
+                  </span>
                 </div>
                 {loading
                   ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
@@ -305,7 +438,7 @@ export function TargetListClient() {
             />
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-3 text-sm text-slate-500">
             {loading ? (
               <span className="inline-flex items-center gap-1 text-blue-500 font-medium">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:0ms]" />
@@ -314,8 +447,20 @@ export function TargetListClient() {
               </span>
             ) : (
               <>
-                <span className="font-medium text-slate-900">{filteredDoctors.length.toLocaleString('pt-BR')}</span>
-                médicos encontrados
+                <span>
+                  <span className="font-medium text-slate-900">{sortedDoctors.length.toLocaleString('pt-BR')}</span>{' '}
+                  médicos encontrados
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={sortedDoctors.length === 0}
+                  className="gap-1.5"
+                >
+                  <Download className="w-4 h-4" />
+                  Exportar
+                </Button>
               </>
             )}
           </div>
@@ -326,17 +471,20 @@ export function TargetListClient() {
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-4 py-3 font-medium">Médico / CRM</th>
-                {PRODUCT_COLUMNS.map(col => (
-                  <th key={col.key} className="px-4 py-3 font-medium text-center">{col.label}</th>
+                <th className="px-4 py-3 font-medium">
+                  <SortHeader label="Médico / CRM" myKey="nome" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} />
+                </th>
+                {PRODUCT_COLUMNS.map((col) => (
+                  <th key={col.key} className="px-4 py-3 font-medium text-center">
+                    <SortHeader label={col.label} myKey={col.key} sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} align="center" />
+                  </th>
                 ))}
                 <th className="px-4 py-3 font-medium">
-                  <div className="flex items-center gap-1">
-                    Score Exeltis
-                    <ArrowUpDown className="w-3 h-3" />
-                  </div>
+                  <SortHeader label="Score Exeltis" myKey="score" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} />
                 </th>
-                <th className="px-4 py-3 font-medium text-center">Potencial</th>
+                <th className="px-4 py-3 font-medium text-center">
+                  <SortHeader label="Potencial" myKey="potencial" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} align="center" />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -370,13 +518,12 @@ export function TargetListClient() {
                 </tr>
               ) : (
                 pageRows.map((doc) => {
-                  const { uf, crm } = splitCrmUf(doc.crmuf);
                   return (
                     <tr key={doc.crmuf} className="group transition-colors hover:bg-slate-50/80">
                       <td className="px-4 py-3">
                         <div className="font-semibold text-slate-900" title={doc.nome_medico}>{abreviaNomeMeio(doc.nome_medico)}</div>
                         <div className="text-xs text-slate-500 font-medium mt-0.5">
-                          {uf}{doc.especialidade ? <span className="text-slate-400"> – {doc.especialidade}</span> : null}
+                          {doc.crmuf}{doc.especialidade ? <span className="text-slate-400"> – {doc.especialidade}</span> : null}
                         </div>
                       </td>
                       {PRODUCT_COLUMNS.map(col => (

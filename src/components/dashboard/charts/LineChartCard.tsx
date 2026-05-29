@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -146,6 +148,12 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
 
   const estrutura = searchParams.get('estrutura') || 'Distrito';
   const distritoFiltro = searchParams.get('distrito') || '';
+  // Filtro de ciclo vem do header (CSV via Ctrl+clique). Vazio = todos os ciclos.
+  const cicloFiltroRaw = searchParams.get('ciclo') || '';
+  const ciclosSelecionados = cicloFiltroRaw
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean);
   const Icon = config.icon;
 
   useEffect(() => {
@@ -181,7 +189,10 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
 
       const rows = data as Array<{ ciclo: string; label: string;[k: string]: any }>;
       const uniqueLabels = Array.from(new Set(rows.map((r) => r.label))).sort();
-      const uniqueCiclos = Array.from(new Set(rows.map((r) => r.ciclo))).sort();
+      const cicloSet = new Set(ciclosSelecionados);
+      const uniqueCiclos = Array.from(new Set(rows.map((r) => r.ciclo)))
+        .filter((c) => cicloSet.size === 0 || cicloSet.has(c))
+        .sort();
 
       setSeries(uniqueLabels);
 
@@ -318,76 +329,147 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
         <div className="h-[400px] w-full mt-4">
           {mounted && (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dados} margin={{ top: 20, right: 30, left: 30, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.grid} />
-                <XAxis
-                  dataKey="cicloLabel"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: CHART_COLORS.tick, fontSize: 12, fontWeight: 500 }}
-                  dy={10}
-                />
-                <YAxis
-                  domain={config.yDomain}
-                  ticks={config.yTicks}
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: CHART_COLORS.tick, fontSize: 11 }}
-                  tickFormatter={config.yTickFormatter}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '8px',
-                    backgroundColor: CHART_COLORS.tooltip.bg,
-                    border: `1px solid ${CHART_COLORS.tooltip.border}`,
-                  }}
-                  itemSorter={(item) => -(item.value as number)}
-                  formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
-                />
-                <Legend content={<CustomChartLegend />} verticalAlign="top" />
-                <ReferenceLine
-                  y={config.referenceLine.y}
-                  stroke={CHART_COLORS.reference}
-                  strokeDasharray="5 5"
-                  strokeWidth={1.5}
-                  label={{
-                    position: 'right',
-                    value: config.referenceLine.label,
-                    fill: CHART_COLORS.reference,
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                />
-                {series.map((label, index) => {
-                  const color = config.lineColors[index % config.lineColors.length];
-                  return (
-                    <Line
-                      key={label}
-                      type="monotone"
-                      dataKey={label}
-                      name={label}
-                      stroke={color}
-                      strokeWidth={3}
-                      dot={{ r: 4, strokeWidth: 2 }}
-                      activeDot={{ r: 6 }}
-                    >
-                      {showLabels && (
-                        <LabelList
-                          dataKey={label}
-                          content={(props: any) => (
-                            <CustomLineLabel
-                              {...props}
-                              stroke={color}
-                              width={config.labelWidth}
-                              formatValue={config.labelFormatValue}
-                            />
-                          )}
-                        />
-                      )}
-                    </Line>
-                  );
-                })}
-              </LineChart>
+              {dados.length === 1 ? (
+                // Um único ciclo: barras (uma por série) — evita o "ponto
+                // flutuante" que o LineChart produz quando só há 1 X.
+                <BarChart data={dados} margin={{ top: 20, right: 30, left: 30, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.grid} />
+                  <XAxis
+                    dataKey="cicloLabel"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: CHART_COLORS.tick, fontSize: 12, fontWeight: 500 }}
+                    dy={10}
+                  />
+                  <YAxis
+                    domain={config.yDomain}
+                    ticks={config.yTicks}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: CHART_COLORS.tick, fontSize: 11 }}
+                    tickFormatter={config.yTickFormatter}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '8px',
+                      backgroundColor: CHART_COLORS.tooltip.bg,
+                      border: `1px solid ${CHART_COLORS.tooltip.border}`,
+                    }}
+                    itemSorter={(item) => -(item.value as number)}
+                    formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
+                    cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
+                  />
+                  <Legend content={<CustomChartLegend />} verticalAlign="top" />
+                  <ReferenceLine
+                    y={config.referenceLine.y}
+                    stroke={CHART_COLORS.reference}
+                    strokeDasharray="5 5"
+                    strokeWidth={1.5}
+                    label={{
+                      position: 'right',
+                      value: config.referenceLine.label,
+                      fill: CHART_COLORS.reference,
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  />
+                  {series.map((label, index) => {
+                    const color = config.lineColors[index % config.lineColors.length];
+                    return (
+                      <Bar
+                        key={label}
+                        dataKey={label}
+                        name={label}
+                        fill={color}
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={56}
+                      >
+                        {showLabels && (
+                          <LabelList
+                            dataKey={label}
+                            position="top"
+                            formatter={(v: any) => config.labelFormatValue(Number(v))}
+                            fill={color}
+                            fontSize={11}
+                            fontWeight={700}
+                          />
+                        )}
+                      </Bar>
+                    );
+                  })}
+                </BarChart>
+              ) : (
+                <LineChart data={dados} margin={{ top: 20, right: 30, left: 30, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.grid} />
+                  <XAxis
+                    dataKey="cicloLabel"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: CHART_COLORS.tick, fontSize: 12, fontWeight: 500 }}
+                    dy={10}
+                  />
+                  <YAxis
+                    domain={config.yDomain}
+                    ticks={config.yTicks}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: CHART_COLORS.tick, fontSize: 11 }}
+                    tickFormatter={config.yTickFormatter}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '8px',
+                      backgroundColor: CHART_COLORS.tooltip.bg,
+                      border: `1px solid ${CHART_COLORS.tooltip.border}`,
+                    }}
+                    itemSorter={(item) => -(item.value as number)}
+                    formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
+                  />
+                  <Legend content={<CustomChartLegend />} verticalAlign="top" />
+                  <ReferenceLine
+                    y={config.referenceLine.y}
+                    stroke={CHART_COLORS.reference}
+                    strokeDasharray="5 5"
+                    strokeWidth={1.5}
+                    label={{
+                      position: 'right',
+                      value: config.referenceLine.label,
+                      fill: CHART_COLORS.reference,
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  />
+                  {series.map((label, index) => {
+                    const color = config.lineColors[index % config.lineColors.length];
+                    return (
+                      <Line
+                        key={label}
+                        type="monotone"
+                        dataKey={label}
+                        name={label}
+                        stroke={color}
+                        strokeWidth={3}
+                        dot={{ r: 4, strokeWidth: 2 }}
+                        activeDot={{ r: 6 }}
+                      >
+                        {showLabels && (
+                          <LabelList
+                            dataKey={label}
+                            content={(props: any) => (
+                              <CustomLineLabel
+                                {...props}
+                                stroke={color}
+                                width={config.labelWidth}
+                                formatValue={config.labelFormatValue}
+                              />
+                            )}
+                          />
+                        )}
+                      </Line>
+                    );
+                  })}
+                </LineChart>
+              )}
             </ResponsiveContainer>
           )}
         </div>

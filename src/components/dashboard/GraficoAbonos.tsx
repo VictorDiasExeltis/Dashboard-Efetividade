@@ -226,9 +226,13 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
         }
       }
 
-      // Passo 2: buscar fato_abonos filtrado por cod_setor e/ou ciclo
-      // Sempre fazemos JOIN com dim_calendario pra poder filtrar/ignorar ciclos.
-      const usaFiltroCiclo = filtroCiclo && filtroCiclo !== 'Todos';
+      // Passo 2: buscar fato_abonos filtrado por cod_setor e/ou ciclo.
+      // filtroCiclo pode ser "Todos", "202604" ou CSV ("202604,202605") quando
+      // o usuário usa Ctrl+clique no filtro multi-seleção.
+      const ciclosSelecionados = (filtroCiclo && filtroCiclo !== 'Todos')
+        ? filtroCiclo.split(',').map((c) => c.trim()).filter(Boolean)
+        : [];
+      const usaFiltroCiclo = ciclosSelecionados.length > 0;
 
       let query = getSupabaseClient()
         .from('fato_abonos')
@@ -239,7 +243,7 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
       }
 
       if (usaFiltroCiclo) {
-        query = query.eq('dim_calendario.ciclo', filtroCiclo);
+        query = query.in('dim_calendario.ciclo', ciclosSelecionados);
       } else {
         // Ignora ciclo "00" (dias não úteis) quando mostrando "Todos"
         query = query.not('dim_calendario.ciclo', 'like', '%00');

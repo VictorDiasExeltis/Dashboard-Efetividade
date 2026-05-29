@@ -84,6 +84,47 @@ export type CoberturaSegmentacao = {
 // Cobertura agregada por segmentação (PROTEGER, CONQUISTAR, MANTER, OBSERVAR),
 // considerando todas as marcas. Um médico que tem segmentação X em qualquer
 // marca conta em X. Filtros: ciclo, distrito, setor, classificação.
+// Contagem de médicos por nível de potencial (1..5). Respeita território e
+// classificação — o painel não depende de ciclo (potencial é per-médico).
+export async function getMedicosPorPotencial(
+  distrito: string = 'Todos',
+  setor: string = 'Todos',
+  classificacao: string = 'Todas',
+): Promise<Record<number, number>> {
+  try {
+    if (!db) return { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+    const hasTerritorio = distrito !== 'Todos' || setor !== 'Todos';
+    const territorioJoin = hasTerritorio
+      ? sql`INNER JOIN dim_hierarquia h ON h.cod_setor = m.cod_setor
+            AND TRUE
+            ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
+            ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}`
+      : sql``;
+
+    const classificacaoWhere = classificacao !== 'Todas'
+      ? sql`AND TRIM(m.classificacao) = ${classificacao}`
+      : sql``;
+
+    const result = await db.execute(sql`
+      SELECT m.potencial, COUNT(*)::integer AS total
+      FROM dim_medicos m
+      ${territorioJoin}
+      WHERE m.status = TRUE
+        AND m.potencial BETWEEN 1 AND 5
+        ${classificacaoWhere}
+      GROUP BY m.potencial
+    `);
+
+    const acc: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    for (const r of result as any[]) acc[Number(r.potencial)] = Number(r.total);
+    return acc;
+  } catch (e) {
+    console.error('getMedicosPorPotencial error:', e);
+    return { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  }
+}
+
 export async function getCoberturaPorSegmentacao(
   ciclo: string = 'Todos',
   distrito: string = 'Todos',

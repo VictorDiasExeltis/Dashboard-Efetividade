@@ -3,7 +3,7 @@
 import React, { Suspense } from 'react';
 import { SegmentacaoFilters } from '@/src/components/dashboard/SegmentacaoFilters';
 import { Card, CardContent } from "@/src/components/ui/card";
-import { Shield, Target, UserCheck, Eye, HelpCircle } from 'lucide-react';
+import { HelpCircle, Flame } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useLayout } from '@/src/context/LayoutContext';
@@ -11,8 +11,7 @@ import {
   getSegmentacaoData,
   getClassificacoes,
   getCiclos,
-  getCoberturaPorSegmentacao,
-  type CoberturaSegmentacao,
+  getMedicosPorPotencial,
 } from '@/src/app/actions';
 
 const productMarcaMap: Record<string, number> = {
@@ -24,17 +23,15 @@ const productMarcaMap: Record<string, number> = {
   "VIZURIA": 10007,
 };
 
-// Ordem canônica + estilo de cada segmentação. Mantemos uma única fonte para
-// que o card vazio (banco ainda sem dado para o segmento) apareça com a paleta
-// correta — não basta indexar pelo array que vem do backend.
-const SEGMENTACAO_META: Record<string, { icon: any; color: string; bg: string; description: string }> = {
-  PROTEGER:   { icon: Shield,    color: 'text-blue-600',    bg: 'bg-blue-50',    description: 'Segmento de defesa — manter relacionamento' },
-  CONQUISTAR: { icon: Target,    color: 'text-emerald-600', bg: 'bg-emerald-50', description: 'Foco em aquisição/expansão' },
-  MANTER:     { icon: UserCheck, color: 'text-amber-600',   bg: 'bg-amber-50',   description: 'Frequência regular esperada' },
-  OBSERVAR:   { icon: Eye,       color: 'text-purple-600',  bg: 'bg-purple-50',  description: 'Monitoramento, baixa prioridade' },
-};
-
-const SEGMENTACOES_ORDEM: Array<keyof typeof SEGMENTACAO_META> = ['PROTEGER', 'CONQUISTAR', 'MANTER', 'OBSERVAR'];
+// Cinco níveis de potencial (1..5). Na escala da empresa, 1 = MAIOR potencial
+// e 5 = MENOR potencial. Cores: rosa intenso no 1, cinza no 5.
+const POTENCIAL_META: Array<{ nivel: number; color: string; bg: string; description: string }> = [
+  { nivel: 1, color: 'text-rose-600',   bg: 'bg-rose-100',   description: 'Potencial máximo' },
+  { nivel: 2, color: 'text-orange-600', bg: 'bg-orange-100', description: 'Alto potencial' },
+  { nivel: 3, color: 'text-amber-700',  bg: 'bg-amber-100',  description: 'Potencial médio' },
+  { nivel: 4, color: 'text-amber-600',  bg: 'bg-amber-50',   description: 'Baixo potencial' },
+  { nivel: 5, color: 'text-slate-600',  bg: 'bg-slate-100',  description: 'Baixíssimo potencial' },
+];
 
 interface SegmentacaoTableProps {
   productName: string;
@@ -225,7 +222,7 @@ export default function VisitacaoXSegmentacao() {
   const distrito       = urlParams.get('distrito')      || 'Todos';
   const setor          = urlParams.get('setor')         || 'Todos';
 
-  const [cobertura,   setCobertura]   = useState<CoberturaSegmentacao[]>([]);
+  const [potenciais,  setPotenciais]  = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
   const [loadingKpis, setLoadingKpis] = useState(true);
   const [ciclos,      setCiclos]      = useState<string[]>([]);
 
@@ -240,19 +237,13 @@ export default function VisitacaoXSegmentacao() {
     getCiclos().then(setCiclos);
   }, []);
 
+  // Os KPIs de potencial são per-médico (não dependem de ciclo).
   useEffect(() => {
-    if (!ciclo) return;
     setLoadingKpis(true);
-    getCoberturaPorSegmentacao(ciclo, distrito, setor, classificacao)
-      .then(setCobertura)
+    getMedicosPorPotencial(distrito, setor, classificacao)
+      .then(setPotenciais)
       .finally(() => setLoadingKpis(false));
-  }, [ciclo, classificacao, distrito, setor]);
-
-  // Indexa por nome pro lookup nos cards (a ordem dos cards é fixa,
-  // independente do que vem do banco).
-  const coberturaByName = Object.fromEntries(
-    cobertura.map((c) => [c.segmentacao, c]),
-  ) as Record<string, CoberturaSegmentacao>;
+  }, [classificacao, distrito, setor]);
 
   useEffect(() => {
     setHeaderState({
@@ -276,45 +267,46 @@ export default function VisitacaoXSegmentacao() {
     "VIZURIA",
   ];
 
+  const totalPanel = Object.values(potenciais).reduce((acc, val) => acc + val, 0);
+
   return (
     <div className="p-6 space-y-6">
 
-      {/* KPI Cards — Cobertura por Segmentação (agregada todas as marcas) no ciclo selecionado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {SEGMENTACOES_ORDEM.map((seg) => {
-          const meta = SEGMENTACAO_META[seg];
-          const Icon = meta.icon;
-          const dado = coberturaByName[seg];
-          const total      = dado?.total ?? 0;
-          const visitados  = dado?.visitados ?? 0;
-          const cobertura  = dado?.cobertura ?? 0;
+      {/* KPI Cards — Médicos por nível de Potencial (1..5), respeita
+          território e classificação. Potencial é per-médico, então independe
+          do ciclo selecionado. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {POTENCIAL_META.map((p, idx) => {
+          const total = potenciais[p.nivel] ?? 0;
+          const pct = totalPanel > 0 ? (total / totalPanel) * 100 : 0;
+          // Primeiro card alinha o tooltip à esquerda (cresce pra direita),
+          // pra não bater na sidebar. Os demais alinham à direita.
+          const tooltipAlign = idx === 0 ? 'left-0' : 'right-0';
           return (
-            <Card key={seg} className="border border-slate-200 shadow-sm bg-white overflow-hidden">
+            <Card key={p.nivel} className="border border-slate-200 shadow-sm bg-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`p-2 rounded-lg ${meta.bg}`}>
-                    <Icon className={`h-5 w-5 ${meta.color}`} />
+                  <div className={`p-2 rounded-lg ${p.bg}`}>
+                    <Flame className={`h-5 w-5 ${p.color}`} />
                   </div>
-                  {!loadingKpis && (
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>
-                      {visitados.toLocaleString('pt-BR')} / {total.toLocaleString('pt-BR')}
-                    </span>
-                  )}
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.bg} ${p.color}`}>
+                    {total.toLocaleString('pt-BR')} {total === 1 ? 'médico' : 'médicos'}
+                  </span>
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center gap-1 group relative">
-                    <p className="text-sm font-medium text-slate-500">{seg}</p>
-                    <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
-                    
-                    {/* Tooltip Popup */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none normal-case">
-                      Percentual de médicos visitados em relação ao total planejado (painel) para a estratégia {seg.toLowerCase()} no ciclo selecionado.
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm font-medium text-slate-500">Potencial {p.nivel}</p>
+                    <span className="group relative inline-flex">
+                      <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
+                      <div className={`absolute bottom-full ${tooltipAlign} mb-2 hidden group-hover:block w-max max-w-[220px] p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none normal-case whitespace-normal`}>
+                        Médicos do painel com potencial {p.nivel}, considerando os filtros de território e classificação.
+                      </div>
+                    </span>
                   </div>
                   {loadingKpis
                     ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
-                    : <h3 className="text-2xl font-bold text-slate-900">{cobertura.toFixed(1)}%</h3>}
-                  <p className="text-xs text-slate-400">{meta.description}</p>
+                    : <h3 className="text-2xl font-bold text-slate-900">{pct.toFixed(1)}%</h3>}
+                  <p className="text-xs text-slate-400">{p.description}</p>
                 </div>
               </CardContent>
             </Card>

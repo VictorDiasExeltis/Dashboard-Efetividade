@@ -14,12 +14,12 @@ const config: LineChartCardConfig = {
     retryHoverBg: 'hover:bg-blue-700',
   },
 
-  titleBase: 'MVD',
-  loadingTitle: 'MVD por Distrito',
+  titleBase: 'MDV',
+  loadingTitle: 'MDV por Distrito',
   loadingDescription: 'Carregando média de visitas diárias...',
   loadingMessage: 'Calculando médias...',
   descriptionPrefix: 'Evolução da Média de Visita Diária',
-  emptyStateMessage: 'Utilize o filtro de "Distrito" no topo para detalhar o MVD por setor.',
+  emptyStateMessage: 'Utilize o filtro de "Distrito" no topo para detalhar o MDV por setor.',
 
   rpcName: 'get_mdv_dinamico',
   errorPrefix: 'Erro ao buscar MDV',

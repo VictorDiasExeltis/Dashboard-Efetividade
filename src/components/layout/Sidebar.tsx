@@ -16,7 +16,7 @@ import { Input } from '@/src/components/ui/input';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
 
 const navItems = [
-  { name: 'Cobertura e Média de Visitação', path: '/visao-executiva', icon: LayoutDashboard },
+  { name: 'Cobertura e MDV', path: '/visao-executiva', icon: LayoutDashboard },
   { name: 'Visitação x Segmentação', path: '/visitacao-x-segmentacao', icon: PieChart },
   { name: 'Entrega de Amostras', path: '/alocacao-de-recursos', icon: BarChart3 },
   { name: 'Médicos não Visitados', path: '/target-list', icon: Target },

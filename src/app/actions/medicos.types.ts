@@ -15,4 +15,6 @@ export interface MedicoNaoVisitado {
   hemolip:     string | null;
   vizuria:     string | null;
   especialidade: string | null;
+  nome_setor:    string | null;
+  nome_distrito: string | null;
 }

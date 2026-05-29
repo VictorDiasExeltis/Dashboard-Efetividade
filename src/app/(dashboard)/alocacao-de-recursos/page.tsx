@@ -191,7 +191,7 @@ function AlocacaoDeRecursosContent() {
       icon: Users,
       color: "text-blue-600",
       bg: "bg-blue-50",
-      tooltip: "Total de médicos únicos ativos cadastrados no painel do território selecionado."
+      tooltip: "Total de médicos únicos ativos cadastrados no painel."
     },
     {
       title: "Média Geral de Amostras",
@@ -211,22 +211,13 @@ function AlocacaoDeRecursosContent() {
       bg: "bg-purple-50",
       tooltip: "Soma de todas as unidades de amostras grátis entregues no período."
     },
-    {
-      title: "Segmentações Ativas",
-      value: segData.filter(r => r.medicos > 0).length.toString(),
-      description: "Com médicos cadastrados",
-      icon: Percent,
-      color: "text-amber-600",
-      bg: "bg-amber-50",
-      tooltip: "Quantidade de segmentos (ex: Proteger, Conquistar) que possuem médicos cadastrados no território."
-    },
   ];
 
   return (
     <div className="p-6 space-y-6">
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">
         {kpiCards.map((kpi) => (
           <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white overflow-hidden">
             <CardContent className="p-6">
