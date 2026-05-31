@@ -135,8 +135,8 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
           <thead className="bg-white text-slate-500 border-b border-slate-200 text-xs hidden md:table-header-group">
             <tr>
               <th className="px-4 py-3 font-medium">Segmentação</th>
-              <th className="px-4 py-3 font-medium">Sim</th>
-              <th className="px-4 py-3 font-medium">Não</th>
+              <th className="px-4 py-3 font-medium">Visitados</th>
+              <th className="px-4 py-3 font-medium">Não Visitados</th>
             </tr>
           </thead>
           <tbody>
@@ -290,7 +290,7 @@ export default function VisitacaoXSegmentacao() {
                     <Flame className={`h-5 w-5 ${p.color}`} />
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.bg} ${p.color}`}>
-                    {total.toLocaleString('pt-BR')} {total === 1 ? 'médico' : 'médicos'}
+                    {total.toLocaleString('pt-BR')}
                   </span>
                 </div>
                 <div className="space-y-1">

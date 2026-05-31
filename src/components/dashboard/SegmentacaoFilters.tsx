@@ -19,7 +19,7 @@ import {
 
 const ESTRUTURAS = ['Distrito', 'Setor'];
 
-const TRIGGER_BASE = 'h-7 py-1 text-xs bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2.5 rounded-md border [&>span]:block [&>span]:truncate overflow-hidden';
+const TRIGGER_BASE = 'h-6 py-0.5 text-[11px] bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2 rounded-md border [&>span]:block [&>span]:truncate overflow-hidden';
 
 // "202605" → "Ciclo 05"
 function formatCiclo(ciclo: string): string {
@@ -113,8 +113,8 @@ export function SegmentacaoFilters() {
     <div className="flex flex-row items-center gap-2 w-full">
 
       {/* Ciclo */}
-      <div className="flex flex-col gap-1 w-[90px] shrink-0">
-        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Ciclo</label>
+      <div className="flex flex-col gap-0.5 w-[78px] shrink-0">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Ciclo</label>
         <CustomDropdown
           value={currentCiclo}
           onChange={(v) => updateParam('ciclo', v)}
@@ -125,8 +125,8 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Classificação */}
-      <div className="flex flex-col gap-1 w-[110px] shrink-0">
-        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Classificação</label>
+      <div className="flex flex-col gap-0.5 w-[100px] shrink-0">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Classificação</label>
         <CustomDropdown
           value={currentClassificacao}
           onChange={(v) => updateParam('classificacao', v)}
@@ -137,8 +137,8 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Estrutura */}
-      <div className="flex flex-col gap-1 w-[90px] shrink-0">
-        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Estrutura</label>
+      <div className="flex flex-col gap-0.5 w-[78px] shrink-0">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Estrutura</label>
         <Select value={currentEstrutura} onValueChange={handleEstrutura}>
           <SelectTrigger className={`${TRIGGER_BASE} hover:border-slate-300`}>
             <SelectValue />
@@ -154,8 +154,8 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Distrito */}
-      <div className="flex flex-col gap-1 w-[110px] shrink-0">
-        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+      <div className="flex flex-col gap-0.5 w-[98px] shrink-0">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
           Distrito{isSetorMode && <span className="ml-1 text-blue-500">*</span>}
         </label>
         <Select value={currentDistrito} onValueChange={(v) => updateParam('distrito', v)} disabled={!distritos.length}>
@@ -173,7 +173,7 @@ export function SegmentacaoFilters() {
       </div>
 
       {/* Setor */}
-      <div className="flex flex-col gap-1 w-[110px] shrink-0">
+      <div className="flex flex-col gap-0.5 w-[98px] shrink-0">
         <label className={`text-[10px] font-semibold uppercase tracking-wide ${isSetorMode ? 'text-slate-500' : 'text-slate-300'}`}>
           Setor
         </label>

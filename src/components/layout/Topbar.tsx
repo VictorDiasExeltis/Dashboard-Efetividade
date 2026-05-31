@@ -25,8 +25,8 @@ export function Topbar({ onMenuClick, title, subtitle, filters }: TopbarProps) {
         <div className="flex flex-row items-center justify-between flex-1 h-full py-2">
           {title && (
             <div className="flex flex-col min-w-fit">
-              <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">{title}</h1>
-              {subtitle && <p className="text-sm text-slate-500 line-clamp-1 mt-0.5">{subtitle}</p>}
+              <h1 className="text-lg font-extrabold text-slate-900 leading-tight">{title}</h1>
+              {subtitle && <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{subtitle}</p>}
             </div>
           )}
 

@@ -125,7 +125,7 @@ function SegmentacaoBadge({ value }: { value: string | null | undefined }) {
   return (
     <span className={cn(
       "inline-flex items-center justify-center font-semibold border rounded-md",
-      isShort ? "w-6 h-6 text-xs" : "px-2 py-0.5 text-[10px] tracking-wide",
+      isShort ? "w-5 h-5 text-[10px]" : "px-1.5 py-0.5 text-[9px] tracking-wide",
       colorClass
     )}>
       {value}
@@ -160,7 +160,7 @@ function PotencialBadge({ value }: { value: number | null | undefined }) {
   const cls = POTENCIAL_BADGE[value] ?? 'bg-slate-100 text-slate-700 border-slate-200';
   return (
     <span className={cn(
-      'inline-flex items-center justify-center w-6 h-6 rounded-md border text-xs font-semibold tabular-nums',
+      'inline-flex items-center justify-center w-5 h-5 rounded-md border text-[10px] font-semibold tabular-nums',
       cls,
     )}>
       {value}
@@ -468,21 +468,21 @@ export function TargetListClient() {
 
         {/* Table Content */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
+          <table className="w-full text-[11px] text-left">
+            <thead className="text-[10px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3 font-medium">
+                <th className="px-2 py-2.5 font-medium">
                   <SortHeader label="Médico / CRM" myKey="nome" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} />
                 </th>
                 {PRODUCT_COLUMNS.map((col) => (
-                  <th key={col.key} className="px-4 py-3 font-medium text-center">
+                  <th key={col.key} className="px-2 py-2.5 font-medium text-center">
                     <SortHeader label={col.label} myKey={col.key} sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} align="center" />
                   </th>
                 ))}
-                <th className="px-4 py-3 font-medium">
+                <th className="px-2 py-2.5 font-medium">
                   <SortHeader label="Score Exeltis" myKey="score" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} />
                 </th>
-                <th className="px-4 py-3 font-medium text-center">
+                <th className="px-2 py-2.5 font-medium text-center">
                   <SortHeader label="Potencial" myKey="potencial" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} align="center" />
                 </th>
               </tr>
@@ -520,28 +520,28 @@ export function TargetListClient() {
                 pageRows.map((doc) => {
                   return (
                     <tr key={doc.crmuf} className="group transition-colors hover:bg-slate-50/80">
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2.5">
                         <div className="font-semibold text-slate-900" title={doc.nome_medico}>{abreviaNomeMeio(doc.nome_medico)}</div>
-                        <div className="text-xs text-slate-500 font-medium mt-0.5">
+                        <div className="text-[10px] text-slate-500 font-medium mt-0.5">
                           {doc.crmuf}{doc.especialidade ? <span className="text-slate-400"> – {doc.especialidade}</span> : null}
                         </div>
                       </td>
                       {PRODUCT_COLUMNS.map(col => (
-                        <td key={col.key} className="px-4 py-3 text-center">
+                        <td key={col.key} className="px-2 py-2.5 text-center">
                           <SegmentacaoBadge value={doc[col.key]} />
                         </td>
                       ))}
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2.5">
                         {doc.score == null || doc.score === 0 ? (
                           <span className="text-slate-300 text-xs">–</span>
                         ) : (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200 tabular-nums">
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200 tabular-nums">
                             <Stethoscope className="w-3 h-3" />
                             {formatScoreK(doc.score)}
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-2 py-2.5 text-center">
                         <PotencialBadge value={doc.potencial} />
                       </td>
                     </tr>

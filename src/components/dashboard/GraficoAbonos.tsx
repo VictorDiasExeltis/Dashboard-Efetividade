@@ -95,7 +95,7 @@ function CustomTooltip({ active, payload }: any) {
     >
       <p
         style={{
-          fontSize: '13px',
+          fontSize: '12px',
           fontWeight: 600,
           color: data.payload.color,
           marginBottom: '4px',
@@ -103,13 +103,13 @@ function CustomTooltip({ active, payload }: any) {
       >
         {data.name}
       </p>
-      <p style={{ fontSize: '12px', color: '#64748b' }}>
+      <p style={{ fontSize: '11px', color: '#64748b' }}>
         <span style={{ fontWeight: 700, color: TOOLTIP_STYLE.color }}>
           {data.value.toFixed(1)}
         </span>{' '}
         dias
       </p>
-      <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+      <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
         ({(data.value * 8).toFixed(0)} horas abonadas)
       </p>
     </div>
@@ -139,7 +139,7 @@ function CustomLegend({ payload }: any) {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            fontSize: '13px',
+            fontSize: '12px',
             color: '#475569',
             maxWidth: '140px',
             minWidth: 0,

@@ -323,44 +323,44 @@ export function TabelaRepresentantes({
       {cabecalho}
 
       <div className="overflow-x-auto flex-1">
-        <table className="w-full text-[13px] text-left">
-          <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
+        <table className="w-full text-[11px] text-left">
+          <thead className="text-[10px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase tracking-wider">
             <tr>
-              <th className="px-4 py-2 font-medium">Nome</th>
-              <th className="px-4 py-2 font-medium">Setor</th>
-              <th className="px-4 py-2 font-medium">Distrito</th>
-              <th className="px-4 py-2 font-medium text-center">Dias Trabalhados</th>
-              <th className="px-4 py-2 font-medium text-center">Dias Abonados</th>
+              <th className="px-2 py-2 font-medium">Nome</th>
+              <th className="px-2 py-2 font-medium">Setor</th>
+              <th className="px-2 py-2 font-medium">Distrito</th>
+              <th className="px-2 py-2 font-medium text-center">Dias Trabalhados</th>
+              <th className="px-2 py-2 font-medium text-center">Dias Abonados</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {dadosPaginados.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={5} className="px-2 py-10 text-center text-sm text-slate-400">
                   Nenhum representante encontrado para os filtros selecionados.
                 </td>
               </tr>
             ) : (
               dadosPaginados.map((rep) => (
                 <tr key={rep.codSetor} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-1.5 font-medium whitespace-nowrap text-slate-900">
+                   <td className="px-2 py-1.5 font-medium whitespace-nowrap text-slate-900">
                     {abreviarNome(rep.nomeRep)}
                   </td>
-                  <td className="px-4 py-1.5 whitespace-nowrap text-slate-600">
+                  <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">
                     {rep.nomeSetor}
                   </td>
-                  <td className="px-4 py-1.5 whitespace-nowrap text-slate-600">
+                  <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">
                     {rep.nomeDistrito}
                   </td>
-                  <td className="px-4 py-1.5 text-center font-medium text-slate-700">
+                  <td className="px-2 py-1.5 text-center font-medium text-slate-700">
                     {rep.diasTrabalhados}
                   </td>
-                  <td className="px-4 py-1.5 text-center">
+                  <td className="px-2 py-1.5 text-center">
                     <span
                       className={
                         rep.diasAbonados > 0
-                          ? 'inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'text-slate-400 text-xs'
+                          ? 'inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200'
+                          : 'text-slate-400 text-[10px]'
                       }
                     >
                       {formatarDiasAbonados(rep.diasAbonados)}

@@ -112,7 +112,7 @@ export function CustomDropdown({
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "h-7 text-xs bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2.5 rounded-md border hover:border-slate-300 [&>span]:block [&>span]:truncate overflow-hidden text-left",
+          "h-6 text-[11px] bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2 rounded-md border hover:border-slate-300 [&>span]:block [&>span]:truncate overflow-hidden text-left",
           disabled && "opacity-40 cursor-not-allowed",
           isOpen && "border-blue-500 ring-1 ring-blue-500"
         )}
@@ -120,7 +120,7 @@ export function CustomDropdown({
         <span className="text-slate-900 block truncate pr-2 w-full">
           {displayLabel || placeholder}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+        <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
       </button>
 
       {isOpen && (

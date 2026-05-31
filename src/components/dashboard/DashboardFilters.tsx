@@ -91,17 +91,17 @@ export function DashboardFilters({
     router.push(`?${params.toString()}`, { scroll: false });
   };
 
-  const triggerBase = 'h-7 py-1 text-xs bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2.5 rounded-md border [&>span]:block [&>span]:truncate overflow-hidden';
+  const triggerBase = 'h-6 py-0.5 text-[11px] bg-white border-slate-200 shadow-sm transition-colors w-full flex items-center justify-between px-2 rounded-md border [&>span]:block [&>span]:truncate overflow-hidden';
   // Em modo Setor, distrito vira obrigatório (sem opção "Todos").
   const distritoOptions = isSetorMode ? distritos : ['Todos', ...distritos];
 
   // Componente interno para evitar repetição dos controles
   const FilterFields = () => (
-    <div className="flex flex-row items-center gap-3 w-full">
+    <div className="flex flex-row items-center gap-2 w-full">
       {/* Ciclo (opcional) */}
       {showCiclo && (
-        <div className="flex flex-col gap-1 w-[90px] shrink-0">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ciclo</label>
+        <div className="flex flex-col gap-0.5 w-[78px] shrink-0">
+          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Ciclo</label>
           <CustomDropdown
             value={currentCiclo}
             onChange={(v) => updateParam('ciclo', v)}
@@ -114,8 +114,8 @@ export function DashboardFilters({
 
       {/* Produto (opcional) */}
       {showProduto && (
-        <div className="flex flex-col gap-1 w-[100px] shrink-0">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Produto</label>
+        <div className="flex flex-col gap-0.5 w-[90px] shrink-0">
+          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Produto</label>
           <CustomDropdown
             value={currentProduto}
             onChange={(v) => updateParam('produto', v)}
@@ -127,8 +127,8 @@ export function DashboardFilters({
       )}
 
       {/* Estrutura */}
-      <div className="flex flex-col gap-1 w-[90px] shrink-0">
-        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Estrutura</label>
+      <div className="flex flex-col gap-0.5 w-[78px] shrink-0">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Estrutura</label>
         <Select value={currentEstrutura} onValueChange={handleEstrutura}>
           <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
             <SelectValue />
@@ -144,8 +144,8 @@ export function DashboardFilters({
       </div>
 
       {/* Distrito */}
-      <div className="flex flex-col gap-1 w-[110px] shrink-0">
-        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+      <div className="flex flex-col gap-0.5 w-[98px] shrink-0">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
           Distrito{isSetorMode && <span className="ml-1 text-blue-500">*</span>}
         </label>
         <Select value={isBrasilMode ? 'Todos' : currentDistritoRaw} onValueChange={(v) => updateParam('distrito', v)} disabled={isBrasilMode}>
@@ -163,8 +163,8 @@ export function DashboardFilters({
       </div>
 
       {/* Setor */}
-      <div className="flex flex-col gap-1 w-[110px] shrink-0">
-        <label className={`text-[10px] font-bold uppercase tracking-wider ${isSetorMode ? 'text-slate-500' : 'text-slate-300'}`}>
+      <div className="flex flex-col gap-0.5 w-[98px] shrink-0">
+        <label className={`text-[9px] font-bold uppercase tracking-wider ${isSetorMode ? 'text-slate-500' : 'text-slate-300'}`}>
           Setor
         </label>
         <Select value={isBrasilMode ? 'Todos' : currentSetor} onValueChange={(v) => updateParam('setor', v)} disabled={!isSetorMode}>
