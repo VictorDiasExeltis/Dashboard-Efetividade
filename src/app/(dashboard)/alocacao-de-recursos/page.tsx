@@ -221,7 +221,7 @@ function AlocacaoDeRecursosContent() {
     {
       title: "Média Geral de Amostras",
       value: mediaGeral,
-      description: "Média ponderada por médico",
+      description: "Média por médico",
       icon: Package,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
