@@ -285,8 +285,6 @@ export default function VisitacaoXSegmentacao() {
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {POTENCIAL_META.map((p, idx) => {
           const { total, visitados } = potenciais[p.nivel] ?? { total: 0, visitados: 0 };
-          const totalVisitadosGeral = Object.values(potenciais).reduce((acc, curr) => acc + curr.visitados, 0);
-          const pctDist = totalVisitadosGeral > 0 ? (visitados / totalVisitadosGeral) * 100 : 0;
           const coberturaPct = total > 0 ? (visitados / total) * 100 : 0;
           // Primeiro card alinha o tooltip à esquerda (cresce pra direita),
           // pra não bater na sidebar. Os demais alinham à direita.
@@ -299,7 +297,7 @@ export default function VisitacaoXSegmentacao() {
                     <Flame className={`h-5 w-5 ${p.color}`} />
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.bg} ${p.color}`}>
-                    {total.toLocaleString('pt-BR')} no painel
+                    {total.toLocaleString('pt-BR')}
                   </span>
                 </div>
                 <div className="space-y-1">
@@ -308,22 +306,17 @@ export default function VisitacaoXSegmentacao() {
                     <span className="group relative inline-flex">
                       <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
                       <div className={`absolute bottom-full ${tooltipAlign} mb-2 hidden group-hover:block w-max max-w-[220px] p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none normal-case whitespace-normal`}>
-                        Médicos de potencial {p.nivel} visitados no ciclo selecionado, representando o percentual de distribuição do total visitado e a cobertura do painel (respeita os filtros de território e classificação).
+                        Percentual de médicos de potencial {p.nivel} visitados no ciclo selecionado, em relação ao total de médicos desse potencial (respeita os filtros de território e classificação).
                       </div>
                     </span>
                   </div>
                   {loadingKpis
                     ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
-                    : <h3 className="text-2xl font-bold text-slate-900">{visitados.toLocaleString('pt-BR')} visitados</h3>}
+                    : <h3 className="text-2xl font-bold text-slate-900">{coberturaPct.toFixed(1)}%</h3>}
                   {!loadingKpis && (
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-medium text-blue-600">
-                        {pctDist.toFixed(1)}% do total visitado
-                      </p>
-                      <p className="text-[10px] text-slate-400">
-                        Cobertura: {coberturaPct.toFixed(1)}%
-                      </p>
-                    </div>
+                    <p className="text-xs text-slate-400">
+                      {visitados.toLocaleString('pt-BR')} visitados
+                    </p>
                   )}
                 </div>
               </CardContent>
