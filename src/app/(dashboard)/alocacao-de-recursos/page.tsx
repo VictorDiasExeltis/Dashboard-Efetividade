@@ -21,9 +21,9 @@ import { DashboardFilters } from '@/src/components/dashboard/DashboardFilters';
 import { getAvailableSetores, getAmostrasData } from '@/src/app/actions';
 import { useLayout } from '@/src/context/LayoutContext';
 
-const CustomLegend = (props: any) => {
-  const { payload } = props;
+const CustomLegend = ({ payload, highlighted, onToggle }: any) => {
   if (!payload) return null;
+  const hasSel: boolean = highlighted instanceof Set && highlighted.size > 0;
   return (
     <div className="flex flex-wrap justify-center gap-2 pb-4 select-none">
       {payload.map((entry: any, index: number) => {
@@ -31,17 +31,24 @@ const CustomLegend = (props: any) => {
         const dotStyle = isMedicos
           ? { background: 'conic-gradient(#0284c7 0 90deg, #059669 90deg 180deg, #d97706 180deg 270deg, #7c3aed 270deg)' }
           : { backgroundColor: '#0ea5e9' };
+        const active = !hasSel || highlighted.has(entry.value);
         return (
-          <div
+          <button
+            type="button"
             key={`item-${index}`}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all shadow-sm"
+            onClick={() => onToggle?.(entry.value)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-bold transition-all shadow-sm cursor-pointer ${
+              active
+                ? 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                : 'border-slate-100 bg-white text-slate-300 opacity-50 hover:opacity-80'
+            }`}
           >
             <span
-              className="w-2 h-2 rounded-full inline-block shrink-0"
-              style={dotStyle}
+              className="w-2 h-2 rounded-full inline-block shrink-0 transition-opacity"
+              style={{ ...dotStyle, opacity: active ? 1 : 0.35 }}
             />
             <span>{entry.value}</span>
-          </div>
+          </button>
         );
       })}
     </div>
@@ -133,6 +140,24 @@ function AlocacaoDeRecursosContent() {
   const [totalAmostras, setTotalAmostras]           = useState(0);
   const [totalMedicosPainel, setTotalMedicosPainel] = useState(0);
   const [loading, setLoading]       = useState(false);
+
+  // Legendas interativas (multi-seleção por clique). Um destaque independente
+  // por gráfico. Vazio = todas as séries em destaque (gráfico normal).
+  const [segHighlight, setSegHighlight]     = useState<Set<string>>(new Set());
+  const [classHighlight, setClassHighlight] = useState<Set<string>>(new Set());
+
+  const makeToggle =
+    (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (label: string) =>
+      setter((prev) => {
+        const next = new Set(prev);
+        if (next.has(label)) next.delete(label);
+        else next.add(label);
+        return next;
+      });
+  const toggleSeg   = makeToggle(setSegHighlight);
+  const toggleClass = makeToggle(setClassHighlight);
+  const segActive   = (n: string) => segHighlight.size === 0   || segHighlight.has(n);
+  const classActive = (n: string) => classHighlight.size === 0 || classHighlight.has(n);
 
   const searchParams = useSearchParams();
   const estrutura   = searchParams.get('estrutura') || 'Distrito';
@@ -312,13 +337,14 @@ function AlocacaoDeRecursosContent() {
                         return [num.toFixed(1), name];
                       }}
                     />
-                    <Legend content={<CustomLegend />} verticalAlign="top" />
+                    <Legend content={<CustomLegend highlighted={segHighlight} onToggle={toggleSeg} />} verticalAlign="top" />
                     <Bar
                       yAxisId="left"
                       dataKey="medicos"
                       name="Nº de Médicos"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={72}
+                      fillOpacity={segActive('Nº de Médicos') ? 1 : 0.2}
                     >
                       {segData.map((entry, i) => (
                         <Cell key={`cell-${i}`} fill={`url(#${getSegGradient(entry.segmentacao).id})`} />
@@ -332,7 +358,8 @@ function AlocacaoDeRecursosContent() {
                       name="Média de Amostras"
                       stroke={CHART.line}
                       strokeWidth={3}
-                      dot={{ fill: CHART.line, r: 5, strokeWidth: 2, stroke: '#ffffff' }}
+                      strokeOpacity={segActive('Média de Amostras') ? 1 : 0.15}
+                      dot={{ fill: CHART.line, r: 5, strokeWidth: 2, stroke: '#ffffff', opacity: segActive('Média de Amostras') ? 1 : 0.15 }}
                       activeDot={{ r: 7 }}
                     >
                       <LabelList dataKey="mediaAmostras" content={<CustomLineLabel />} />
@@ -407,13 +434,14 @@ function AlocacaoDeRecursosContent() {
                         return [num.toFixed(1), name];
                       }}
                     />
-                    <Legend content={<CustomLegend />} verticalAlign="top" />
+                    <Legend content={<CustomLegend highlighted={classHighlight} onToggle={toggleClass} />} verticalAlign="top" />
                     <Bar
                       yAxisId="left"
                       dataKey="medicos"
                       name="Nº de Médicos"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={72}
+                      fillOpacity={classActive('Nº de Médicos') ? 1 : 0.2}
                     >
                       {classData.map((_, i) => (
                         <Cell key={`cell-${i}`} fill={`url(#${CLASS_GRADIENTS[i % CLASS_GRADIENTS.length].id})`} />
@@ -427,7 +455,8 @@ function AlocacaoDeRecursosContent() {
                       name="Média de Amostras"
                       stroke={CHART.line}
                       strokeWidth={3}
-                      dot={{ fill: CHART.line, r: 5, strokeWidth: 2, stroke: '#ffffff' }}
+                      strokeOpacity={classActive('Média de Amostras') ? 1 : 0.15}
+                      dot={{ fill: CHART.line, r: 5, strokeWidth: 2, stroke: '#ffffff', opacity: classActive('Média de Amostras') ? 1 : 0.15 }}
                       activeDot={{ r: 7 }}
                     >
                       <LabelList dataKey="mediaAmostras" content={<CustomLineLabel />} />

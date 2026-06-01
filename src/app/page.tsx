@@ -2,14 +2,17 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getSupabaseClient } from "@/src/lib/supabase/client";
 
 export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    // Acesso direto: enquanto autenticação estiver desativada, redireciona
-    // o usuário direto para o dashboard.
-    router.push("/visao-executiva");
+    // Redireciona conforme a sessão: dashboard se logado, login caso contrário.
+    const supabase = getSupabaseClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      router.replace(session ? "/visao-executiva" : "/login");
+    });
   }, [router]);
 
   return (

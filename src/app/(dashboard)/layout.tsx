@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Layout } from "@/src/components/layout/Layout";
 import { LayoutProvider } from '@/src/context/LayoutContext';
+import { getSupabaseClient } from '@/src/lib/supabase/client';
 
 export default function DashboardLayout({
   children,
@@ -15,9 +16,37 @@ export default function DashboardLayout({
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Forçando a autenticação para liberar o acesso ao dashboard
-    setAuthenticated(true);
-    setLoading(false);
+    const supabase = getSupabaseClient();
+
+    // Verifica se há uma sessão ativa; se não houver, redireciona para o login
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setAuthenticated(true);
+        setLoading(false);
+      } else {
+        router.replace("/login");
+      }
+    };
+
+    checkSession();
+
+    // Mantém o guard reativo: se o usuário deslogar, volta para o login
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session) {
+          setAuthenticated(true);
+          setLoading(false);
+        } else {
+          setAuthenticated(false);
+          router.replace("/login");
+        }
+      }
+    );
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [router]);
 
   // Enquanto verifica o estado da autenticação, mostra um loader

@@ -63,7 +63,7 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold text-slate-900">Acesso ao Sistema</h1>
           <p className="text-slate-500 mt-2 text-sm">
-            Insira seu e-mail corporativo para receber um link de acesso direto
+            Insira seu e-mail corporativo e sua senha para acessar
           </p>
         </div>
         
@@ -100,21 +100,22 @@ export default function LoginPage() {
               label: 'text-slate-700 font-medium mb-1',
             }
           }}
-          // Define a visualização padrão como magic link
-          view="magic_link"
+          // Define a visualização padrão como login por e-mail e senha
+          view="sign_in"
           // Remove provedores OAuth para ter APENAS email
           providers={[]}
-          // Remove links secundários de navegação ("Esqueci a senha", "Cadastre-se")
+          // Remove links secundários de navegação ("Esqueci a senha", "Cadastre-se").
+          // Mantemos false pois ambos exigiriam envio de e-mail.
           showLinks={false}
           localization={{
             variables: {
-              magic_link: {
-                email_input_label: "Endereço de e-mail corporativo",
+              sign_in: {
+                email_label: "Endereço de e-mail corporativo",
+                password_label: "Senha",
                 email_input_placeholder: "nome@empresa.com",
-                button_label: "Enviar Link de Acesso",
-                loading_button_label: "Enviando link...",
-                link_text: "Enviar um link mágico para o meu e-mail",
-                confirmation_text: "Verifique sua caixa de entrada para acessar o link mágico"
+                password_input_placeholder: "Sua senha",
+                button_label: "Entrar",
+                loading_button_label: "Entrando..."
               }
             }
           }}

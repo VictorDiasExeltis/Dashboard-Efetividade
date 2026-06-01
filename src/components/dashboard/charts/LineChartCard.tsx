@@ -47,22 +47,32 @@ function formatarCicloLabel(ciclo: string): string {
   return `Ciclo ${String(num).padStart(2, '0')}`;
 }
 
-function CustomChartLegend({ payload }: any) {
+function CustomChartLegend({ payload, highlighted, onToggle }: any) {
   if (!payload) return null;
+  const hasSel: boolean = highlighted instanceof Set && highlighted.size > 0;
   return (
     <div className="flex flex-wrap justify-center gap-2 pb-4 select-none">
-      {payload.map((entry: any, index: number) => (
-        <div
-          key={`item-${index}`}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all shadow-sm"
-        >
-          <span
-            className="w-2 h-2 rounded-full inline-block shrink-0"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span>{entry.value}</span>
-        </div>
-      ))}
+      {payload.map((entry: any, index: number) => {
+        const active = !hasSel || highlighted.has(entry.value);
+        return (
+          <button
+            type="button"
+            key={`item-${index}`}
+            onClick={() => onToggle?.(entry.value)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-bold transition-all shadow-sm cursor-pointer ${
+              active
+                ? 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                : 'border-slate-100 bg-white text-slate-300 opacity-50 hover:opacity-80'
+            }`}
+          >
+            <span
+              className="w-2 h-2 rounded-full inline-block shrink-0 transition-opacity"
+              style={{ backgroundColor: entry.color, opacity: active ? 1 : 0.35 }}
+            />
+            <span>{entry.value}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -145,6 +155,19 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  // Séries destacadas pela legenda interativa (multi-seleção por clique).
+  // Vazio = todas em destaque (gráfico normal).
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
+
+  const toggleSeries = (label: string) => {
+    setHighlighted((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+  const isActive = (label: string) => highlighted.size === 0 || highlighted.has(label);
 
   const estrutura = searchParams.get('estrutura') || 'Distrito';
   const distritoFiltro = searchParams.get('distrito') || '';
@@ -159,6 +182,12 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Se as séries mudam (troca de filtro/estrutura), limpa o destaque para não
+  // ficar apontando para uma série que não existe mais.
+  useEffect(() => {
+    setHighlighted(new Set());
+  }, [estrutura, distritoFiltro]);
 
   async function fetchDados() {
     if (estrutura === 'Setor' && (!distritoFiltro || distritoFiltro === 'Todos')) {
@@ -359,7 +388,7 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                     formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
                     cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
                   />
-                  <Legend content={<CustomChartLegend />} verticalAlign="top" />
+                  <Legend content={<CustomChartLegend highlighted={highlighted} onToggle={toggleSeries} />} verticalAlign="top" />
                   <ReferenceLine
                     y={config.referenceLine.y}
                     stroke={CHART_COLORS.reference}
@@ -381,10 +410,11 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                         dataKey={label}
                         name={label}
                         fill={color}
+                        fillOpacity={isActive(label) ? 1 : 0.2}
                         radius={[4, 4, 0, 0]}
                         maxBarSize={56}
                       >
-                        {showLabels && (
+                        {showLabels && isActive(label) && (
                           <LabelList
                             dataKey={label}
                             position="top"
@@ -425,7 +455,7 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                     itemSorter={(item) => -(item.value as number)}
                     formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
                   />
-                  <Legend content={<CustomChartLegend />} verticalAlign="top" />
+                  <Legend content={<CustomChartLegend highlighted={highlighted} onToggle={toggleSeries} />} verticalAlign="top" />
                   <ReferenceLine
                     y={config.referenceLine.y}
                     stroke={CHART_COLORS.reference}
@@ -449,10 +479,11 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                         name={label}
                         stroke={color}
                         strokeWidth={3}
-                        dot={{ r: 4, strokeWidth: 2 }}
+                        strokeOpacity={isActive(label) ? 1 : 0.15}
+                        dot={{ r: 4, strokeWidth: 2, opacity: isActive(label) ? 1 : 0.15 }}
                         activeDot={{ r: 6 }}
                       >
-                        {showLabels && (
+                        {showLabels && isActive(label) && (
                           <LabelList
                             dataKey={label}
                             content={(props: any) => (

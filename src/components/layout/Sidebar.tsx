@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -27,8 +27,41 @@ interface SidebarProps {
   onClose: () => void;
 }
 
+// Deriva um nome de exibição a partir do e-mail: pega a parte antes do "@",
+// separa por "." "_" "-", e capitaliza cada palavra.
+// Ex.: "victor.eugenio@exeltis.com" -> "Victor Eugenio".
+function nomeFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? '';
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(' ');
+}
+
+// Iniciais para o avatar: primeira letra do primeiro e do último nome.
+// Ex.: "Victor Eugenio" -> "VE"; "Victor" -> "V".
+function iniciaisFromNome(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return '';
+  if (partes.length === 1) return partes[0].charAt(0).toUpperCase();
+  return (partes[0].charAt(0) + partes[partes.length - 1].charAt(0)).toUpperCase();
+}
+
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
+
+  useEffect(() => {
+    getSupabaseClient()
+      .auth.getUser()
+      .then(({ data: { user } }) => {
+        const mail = user?.email ?? '';
+        setEmail(mail);
+        if (mail) setNome(nomeFromEmail(mail));
+      });
+  }, []);
 
   return (
     <>
@@ -48,12 +81,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* User Profile */}
         <div className="h-[102px] px-4 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold overflow-hidden">
-              <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <div className="w-10 h-10 rounded-full bg-blue-900 flex items-center justify-center text-white text-sm font-bold shrink-0 select-none">
+              {iniciaisFromNome(nome)}
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-slate-800">João Silva</span>
-              <span className="text-xs text-slate-500">Gestor de Distrito</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold text-slate-800 truncate">
+                {nome || 'Carregando...'}
+              </span>
+              <span className="text-xs text-slate-500 truncate" title={email}>
+                {email}
+              </span>
             </div>
           </div>
           <button 
