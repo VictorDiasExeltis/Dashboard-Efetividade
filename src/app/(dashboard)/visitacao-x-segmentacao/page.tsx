@@ -306,7 +306,6 @@ export default function VisitacaoXSegmentacao() {
                   {loadingKpis
                     ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
                     : <h3 className="text-2xl font-bold text-slate-900">{pct.toFixed(1)}%</h3>}
-                  <p className="text-xs text-slate-400">{p.description}</p>
                 </div>
               </CardContent>
             </Card>
