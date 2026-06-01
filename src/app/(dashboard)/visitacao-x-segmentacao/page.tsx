@@ -11,7 +11,8 @@ import {
   getSegmentacaoData,
   getClassificacoes,
   getCiclos,
-  getMedicosPorPotencial,
+  getVisitadosPorPotencial,
+  type PotencialVisitacao,
 } from '@/src/app/actions';
 
 const productMarcaMap: Record<string, number> = {
@@ -222,7 +223,13 @@ export default function VisitacaoXSegmentacao() {
   const distrito       = urlParams.get('distrito')      || 'Todos';
   const setor          = urlParams.get('setor')         || 'Todos';
 
-  const [potenciais,  setPotenciais]  = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
+  const [potenciais,  setPotenciais]  = useState<Record<number, PotencialVisitacao>>({
+    1: { total: 0, visitados: 0 },
+    2: { total: 0, visitados: 0 },
+    3: { total: 0, visitados: 0 },
+    4: { total: 0, visitados: 0 },
+    5: { total: 0, visitados: 0 },
+  });
   const [loadingKpis, setLoadingKpis] = useState(true);
   const [ciclos,      setCiclos]      = useState<string[]>([]);
 
@@ -237,13 +244,15 @@ export default function VisitacaoXSegmentacao() {
     getCiclos().then(setCiclos);
   }, []);
 
-  // Os KPIs de potencial são per-médico (não dependem de ciclo).
+  // Cobertura de visitação por potencial — depende do ciclo (e do território /
+  // classificação). Aguarda o ciclo default ser resolvido antes de consultar.
   useEffect(() => {
+    if (!ciclo) return;
     setLoadingKpis(true);
-    getMedicosPorPotencial(distrito, setor, classificacao)
+    getVisitadosPorPotencial(distrito, setor, classificacao, ciclo)
       .then(setPotenciais)
       .finally(() => setLoadingKpis(false));
-  }, [classificacao, distrito, setor]);
+  }, [classificacao, distrito, setor, ciclo]);
 
   useEffect(() => {
     setHeaderState({
@@ -267,18 +276,18 @@ export default function VisitacaoXSegmentacao() {
     "VIZURIA",
   ];
 
-  const totalPanel = Object.values(potenciais).reduce((acc, val) => acc + val, 0);
-
   return (
     <div className="p-6 space-y-6">
 
-      {/* KPI Cards — Médicos por nível de Potencial (1..5), respeita
-          território e classificação. Potencial é per-médico, então independe
-          do ciclo selecionado. */}
+      {/* KPI Cards — Cobertura de visitação por nível de Potencial (1..5):
+          % de médicos daquele potencial visitados no ciclo, respeitando
+          território e classificação. */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {POTENCIAL_META.map((p, idx) => {
-          const total = potenciais[p.nivel] ?? 0;
-          const pct = totalPanel > 0 ? (total / totalPanel) * 100 : 0;
+          const { total, visitados } = potenciais[p.nivel] ?? { total: 0, visitados: 0 };
+          const totalVisitadosGeral = Object.values(potenciais).reduce((acc, curr) => acc + curr.visitados, 0);
+          const pctDist = totalVisitadosGeral > 0 ? (visitados / totalVisitadosGeral) * 100 : 0;
+          const coberturaPct = total > 0 ? (visitados / total) * 100 : 0;
           // Primeiro card alinha o tooltip à esquerda (cresce pra direita),
           // pra não bater na sidebar. Os demais alinham à direita.
           const tooltipAlign = idx === 0 ? 'left-0' : 'right-0';
@@ -290,7 +299,7 @@ export default function VisitacaoXSegmentacao() {
                     <Flame className={`h-5 w-5 ${p.color}`} />
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.bg} ${p.color}`}>
-                    {total.toLocaleString('pt-BR')}
+                    {total.toLocaleString('pt-BR')} no painel
                   </span>
                 </div>
                 <div className="space-y-1">
@@ -299,13 +308,23 @@ export default function VisitacaoXSegmentacao() {
                     <span className="group relative inline-flex">
                       <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
                       <div className={`absolute bottom-full ${tooltipAlign} mb-2 hidden group-hover:block w-max max-w-[220px] p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none normal-case whitespace-normal`}>
-                        Médicos do painel com potencial {p.nivel}, considerando os filtros de território e classificação.
+                        Médicos de potencial {p.nivel} visitados no ciclo selecionado, representando o percentual de distribuição do total visitado e a cobertura do painel (respeita os filtros de território e classificação).
                       </div>
                     </span>
                   </div>
                   {loadingKpis
                     ? <div className="h-8 w-20 bg-slate-200 rounded-md animate-pulse mt-1" />
-                    : <h3 className="text-2xl font-bold text-slate-900">{pct.toFixed(1)}%</h3>}
+                    : <h3 className="text-2xl font-bold text-slate-900">{visitados.toLocaleString('pt-BR')} visitados</h3>}
+                  {!loadingKpis && (
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-medium text-blue-600">
+                        {pctDist.toFixed(1)}% do total visitado
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Cobertura: {coberturaPct.toFixed(1)}%
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

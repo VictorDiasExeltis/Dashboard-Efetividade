@@ -84,44 +84,86 @@ export type CoberturaSegmentacao = {
 // Cobertura agregada por segmentação (PROTEGER, CONQUISTAR, MANTER, OBSERVAR),
 // considerando todas as marcas. Um médico que tem segmentação X em qualquer
 // marca conta em X. Filtros: ciclo, distrito, setor, classificação.
-// Contagem de médicos por nível de potencial (1..5). Respeita território e
-// classificação — o painel não depende de ciclo (potencial é per-médico).
-export async function getMedicosPorPotencial(
+export type PotencialVisitacao = { total: number; visitados: number };
+
+// Cobertura de visitação por nível de potencial (1..5). Para cada nível retorna:
+//   total     -> médicos ativos daquele potencial no recorte (território + classificação)
+//   visitados -> desses, quantos receberam ao menos uma visita no ciclo/território
+// A cobertura do nível = visitados / total. Respeita ciclo, distrito, setor e
+// classificação (diferente da versão anterior, que só contava o painel).
+export async function getVisitadosPorPotencial(
   distrito: string = 'Todos',
   setor: string = 'Todos',
   classificacao: string = 'Todas',
-): Promise<Record<number, number>> {
+  ciclo: string = 'Todos',
+): Promise<Record<number, PotencialVisitacao>> {
+  const vazio: Record<number, PotencialVisitacao> = {
+    1: { total: 0, visitados: 0 },
+    2: { total: 0, visitados: 0 },
+    3: { total: 0, visitados: 0 },
+    4: { total: 0, visitados: 0 },
+    5: { total: 0, visitados: 0 },
+  };
   try {
-    if (!db) return { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    if (!db) return vazio;
 
+    const dbCiclo = ciclo !== 'Todos'
+      ? ciclo.split(',').map((c) => normalizeCiclo(c.trim())).join(',')
+      : ciclo;
     const hasTerritorio = distrito !== 'Todos' || setor !== 'Todos';
-    const territorioJoin = hasTerritorio
+
+    // Restringe a base de médicos ao território (via cod_setor do médico).
+    const territorioMedicoJoin = hasTerritorio
       ? sql`INNER JOIN dim_hierarquia h ON h.cod_setor = m.cod_setor
             AND TRUE
             ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
             ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}`
       : sql``;
 
+    // Restringe as visitas consideradas ao território (via cod_setor da visita).
+    const territorioVisitaWhere = hasTerritorio
+      ? sql`AND v.cod_setor IN (
+          SELECT h.cod_setor FROM dim_hierarquia h
+          WHERE TRUE
+            ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
+            ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}
+        )`
+      : sql``;
+
     const classificacaoWhere = classificacao !== 'Todas'
-      ? sql`AND TRIM(m.classificacao) = ${classificacao}`
+      ? sql`AND TRIM(m.classificacao) IN (${sql.raw(classificacao.split(',').map((c) => `'${c.trim()}'`).join(','))})`
+      : sql``;
+
+    const cicloWhere = ciclo !== 'Todos'
+      ? sql`AND v.ciclo IN (${sql.raw(dbCiclo.split(',').map((c) => `'${c.trim()}'`).join(','))})`
       : sql``;
 
     const result = await db.execute(sql`
-      SELECT m.potencial, COUNT(*)::integer AS total
+      SELECT
+        m.potencial,
+        COUNT(DISTINCT m.crmuf)::integer AS total,
+        COUNT(DISTINCT v.crmuf)::integer AS visitados
       FROM dim_medicos m
-      ${territorioJoin}
+      ${territorioMedicoJoin}
+      LEFT JOIN fato_visitas v
+        ON v.crmuf = m.crmuf ${territorioVisitaWhere} ${cicloWhere}
       WHERE m.status = TRUE
         AND m.potencial BETWEEN 1 AND 5
         ${classificacaoWhere}
       GROUP BY m.potencial
     `);
 
-    const acc: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    for (const r of result as any[]) acc[Number(r.potencial)] = Number(r.total);
+    const acc: Record<number, PotencialVisitacao> = { ...vazio };
+    for (const r of result as any[]) {
+      acc[Number(r.potencial)] = {
+        total: Number(r.total || 0),
+        visitados: Number(r.visitados || 0),
+      };
+    }
     return acc;
   } catch (e) {
-    console.error('getMedicosPorPotencial error:', e);
-    return { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    console.error('getVisitadosPorPotencial error:', e);
+    return vazio;
   }
 }
 
