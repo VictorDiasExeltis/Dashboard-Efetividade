@@ -2,9 +2,11 @@
 
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
+import { requireUser } from '@/src/lib/supabase/auth';
 
 export async function getSetoresPorDistrito(distrito: string): Promise<string[]> {
   try {
+    await requireUser();
     if (!db) return [];
     const result = await db.execute(sql`
       SELECT DISTINCT nome_setor
@@ -24,6 +26,7 @@ export async function getSetoresPorDistrito(distrito: string): Promise<string[]>
 // automaticamente no filtro sem necessidade de mudar código.
 export async function getDistritos(): Promise<string[]> {
   try {
+    await requireUser();
     if (!db) return [];
     const result = await db.execute(sql`
       SELECT DISTINCT nome_distrito
@@ -41,6 +44,7 @@ export async function getDistritos(): Promise<string[]> {
 // Produtos disponíveis vêm de dim_produtos. Lista os nomes para uso em filtros.
 export async function getProdutos(): Promise<string[]> {
   try {
+    await requireUser();
     if (!db) return [];
     const result = await db.execute(sql`
       SELECT DISTINCT nome_produto
@@ -60,6 +64,7 @@ export async function getProdutos(): Promise<string[]> {
 // novo ou inverso.
 export async function getCiclos(): Promise<string[]> {
   try {
+    await requireUser();
     if (!db) return [];
     const result = await db.execute(sql`
       SELECT DISTINCT ciclo

@@ -45,6 +45,17 @@ export const fato_segmentacao = pgTable('fato_segmentacao', {
   segmentacao: varchar('segmentacao'),
 });
 
+// Carga diária por setor — valores cumulativos "até o momento" no ciclo atual.
+// Uma linha por setor, sobrescrita a cada carga diária. Se for preciso histórico
+// diário, adicionar `data` + `ciclo` e tornar a PK composta.
+export const fato_diario = pgTable('fato_diario', {
+  cod_setor:          integer('cod_setor').primaryKey(), // FK → dim_hierarquia.cod_setor
+  dias_trabalhados:   numeric('dias_trabalhados').notNull().default('0'),  // aceita frações (ex.: 8.25)
+  dias_abonados:      numeric('dias_abonados').notNull().default('0'),     // aceita frações
+  visitas_realizadas: integer('visitas_realizadas').notNull().default(0),
+  painel:             integer('painel'),                                   // médicos no painel do rep (~170-200+)
+});
+
 // Metas por ciclo (substitui o antigo `produtividade_ciclo`)
 export const metas_ciclo = pgTable('metas_ciclo', {
   id_meta:          uuid('id_meta').primaryKey(),

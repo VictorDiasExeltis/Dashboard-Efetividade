@@ -9,8 +9,8 @@
 //   só rotaciona os IDs do arquivo dela, deixando as outras páginas intactas.
 
 export { getExecutiveMetrics, getAvailableSetores }           from './actions/executive';
-export { getClassificacoes, getKpisClassificacao, getSegmentacaoData, getCoberturaPorSegmentacao, getVisitadosPorPotencial } from './actions/segmentacao';
-export type { CoberturaSegmentacao, PotencialVisitacao } from './actions/segmentacao';
+export { getClassificacoes, getSegmentacaoData, getVisitadosPorPotencial } from './actions/segmentacao';
+export type { PotencialVisitacao } from './actions/segmentacao';
 export { getAmostrasData }                                    from './actions/amostras';
 export { getMedicosNaoVisitados, getTotalMedicosAtivosTerritorio } from './actions/medicos';
 export { getSetoresPorDistrito, getDistritos, getCiclos, getProdutos } from './actions/shared';

@@ -2,6 +2,7 @@
 
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
+import { requireUser } from '@/src/lib/supabase/auth';
 import type { MedicoNaoVisitado } from './medicos.types';
 
 export async function getMedicosNaoVisitados(
@@ -9,6 +10,7 @@ export async function getMedicosNaoVisitados(
   setor:    string = 'Todos'
 ): Promise<MedicoNaoVisitado[]> {
   try {
+    await requireUser();
     if (!db) return [];
 
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')
@@ -95,6 +97,7 @@ export async function getTotalMedicosAtivosTerritorio(
   setor:    string = 'Todos'
 ): Promise<number> {
   try {
+    await requireUser();
     if (!db) return 0;
 
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')

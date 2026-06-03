@@ -2,6 +2,7 @@
 
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
+import { requireUser } from '@/src/lib/supabase/auth';
 
 export async function getExecutiveMetrics(
   distrito: string = 'Todos',
@@ -10,6 +11,7 @@ export async function getExecutiveMetrics(
   ciclos: string[] = []
 ) {
   try {
+    await requireUser();
     if (!db) {
       throw new Error("Database not connected");
     }
@@ -67,6 +69,7 @@ export async function getExecutiveMetrics(
 
 export async function getAvailableSetores(distrito: string = 'Todos') {
   try {
+    await requireUser();
     if (!db) return [];
 
     const result = distrito !== 'Todos'

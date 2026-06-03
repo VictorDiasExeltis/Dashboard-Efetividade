@@ -2,6 +2,7 @@
 
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
+import { requireUser } from '@/src/lib/supabase/auth';
 
 export async function getAmostrasData(
   distrito: string = 'Todos',
@@ -15,7 +16,17 @@ export async function getAmostrasData(
   totalMedicosPainel: number;
 }> {
   try {
+    await requireUser();
     if (!db) return { bySegmentacao: [], byClassificacao: [], totalAmostras: 0, totalMedicosPainel: 0 };
+
+    // Valores parametrizados (sql`${v}` vira bind param) — nunca interpolar
+    // input do cliente como SQL cru (sql.raw) sob risco de injection.
+    const cicloList   = ciclo.split(',').map((c) => c.trim()).filter(Boolean);
+    const produtoList = produto.split(',').map((p) => p.trim()).filter(Boolean);
+    const cicloInList   = sql.join(cicloList.map((c) => sql`${c}`), sql`, `);
+    const produtoInList = sql.join(produtoList.map((p) => sql`${p}`), sql`, `);
+    const hasCiclo   = ciclo   !== 'Todos' && cicloList.length   > 0;
+    const hasProduto = produto !== 'Todos' && produtoList.length > 0;
 
     const territorioJoin = (distrito !== 'Todos' || setor !== 'Todos')
       ? sql`AND v.cod_setor IN (
@@ -26,16 +37,16 @@ export async function getAmostrasData(
         )`
       : sql``;
 
-    const cicloJoin = ciclo !== 'Todos'
-      ? sql`AND v.ciclo IN (${sql.raw(ciclo.split(',').map((c) => `'${c.trim()}'`).join(','))})`
+    const cicloJoin = hasCiclo
+      ? sql`AND v.ciclo IN (${cicloInList})`
       : sql``;
 
     // Filtro de produto restringe quais linhas de fato_amostras entram na soma.
     // Aplicado no ON do LEFT JOIN para preservar médicos sem amostras do produto
     // (eles continuam no denominador com média 0).
-    const produtoJoin = produto !== 'Todos'
+    const produtoJoin = hasProduto
       ? sql`AND a.id_produto IN (
-          SELECT id_produto FROM dim_produtos WHERE nome_produto IN (${sql.raw(produto.split(',').map((p) => `'${p.trim()}'`).join(','))})
+          SELECT id_produto FROM dim_produtos WHERE nome_produto IN (${produtoInList})
         )`
       : sql``;
 
@@ -57,11 +68,11 @@ export async function getAmostrasData(
             ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}
         )`
       : sql``;
-    const cicloFiltro = ciclo !== 'Todos'
-      ? sql`AND v.ciclo IN (${sql.raw(ciclo.split(',').map((c) => `'${c.trim()}'`).join(','))})`
+    const cicloFiltro = hasCiclo
+      ? sql`AND v.ciclo IN (${cicloInList})`
       : sql``;
-    const produtoFiltro = produto !== 'Todos'
-      ? sql`AND p.nome_produto IN (${sql.raw(produto.split(',').map((p) => `'${p.trim()}'`).join(','))})`
+    const produtoFiltro = hasProduto
+      ? sql`AND p.nome_produto IN (${produtoInList})`
       : sql``;
 
     const [segResult, classResult, totalResult, painelResult] = await Promise.all([
@@ -121,8 +132,8 @@ export async function getAmostrasData(
         WHERE TRUE
           ${territorioJoin}
           ${cicloJoin}
-          ${produto !== 'Todos' ? sql`AND a.id_produto IN (
-            SELECT id_produto FROM dim_produtos WHERE nome_produto IN (${sql.raw(produto.split(',').map((p) => `'${p.trim()}'`).join(','))})
+          ${hasProduto ? sql`AND a.id_produto IN (
+            SELECT id_produto FROM dim_produtos WHERE nome_produto IN (${produtoInList})
           )` : sql``}
       `),
       // Tamanho do painel — denominador da média geral.
