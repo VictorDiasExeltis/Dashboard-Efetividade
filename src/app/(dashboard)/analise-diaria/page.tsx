@@ -33,7 +33,9 @@ import { useLayout } from '@/src/context/LayoutContext';
 import { AnaliseDiariaFilters } from '@/src/components/dashboard/AnaliseDiariaFilters';
 import {
   getAnaliseDiaria,
+  getCicloProgresso,
   type AnaliseDiariaRow,
+  type CicloProgresso,
   type StatusProjecao,
 } from '@/src/app/actions/analise-diaria';
 
@@ -263,6 +265,7 @@ export default function AnaliseDiaria() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [progresso, setProgresso] = useState<CicloProgresso | null>(null);
 
   const setor = searchParams.get('setor') || 'Todos';
   // Setor único selecionado → barras lado a lado; senão, linhas.
@@ -298,6 +301,8 @@ export default function AnaliseDiaria() {
     getAnaliseDiaria()
       .then((data) => { if (!cancelled) setRows(data); })
       .finally(() => { if (!cancelled) setLoading(false); });
+    getCicloProgresso()
+      .then((p) => { if (!cancelled) setProgresso(p); });
     return () => { cancelled = true; };
   }, []);
 
@@ -395,6 +400,18 @@ export default function AnaliseDiaria() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Progresso do ciclo: em que dia útil estamos e quantos faltam */}
+      {progresso?.ciclo && (
+        <div className="flex items-center px-1">
+          <div className="flex items-center gap-2 text-slate-500">
+            <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+              Ciclo {progresso.ciclo.slice(-2)} · Dia {progresso.dia_atual} de {progresso.dias_uteis} dias úteis · faltam {progresso.dias_restantes} {progresso.dias_restantes === 1 ? 'dia útil' : 'dias úteis'}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6">
         <BarCompareCard
           title="Visitas Realizadas x Faltantes"

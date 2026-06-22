@@ -3,10 +3,17 @@
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
 import { requireUser } from '@/src/lib/supabase/auth';
+import { cacheLoader } from './_cache';
 
 export async function getClassificacoes(): Promise<string[]> {
+  await requireUser();
+  return _getClassificacoesCached();
+}
+
+const _getClassificacoesCached = cacheLoader(
+  ['classificacoes'],
+  async (): Promise<string[]> => {
   try {
-    await requireUser();
     if (!db) return [];
     const result = await db.execute(sql`
       SELECT DISTINCT TRIM(classificacao) as classificacao
@@ -20,7 +27,9 @@ export async function getClassificacoes(): Promise<string[]> {
     console.error('getClassificacoes error:', e);
     return [];
   }
-}
+  },
+  1800,
+);
 
 // Aceita ciclo no formato bruto do banco ("202604") ou no formato legado da
 // UI ("CICLO 04"). Retorna sempre o formato do banco. Funciona com qualquer
@@ -45,6 +54,18 @@ export async function getVisitadosPorPotencial(
   classificacao: string = 'Todas',
   ciclo: string = 'Todos',
 ): Promise<Record<number, PotencialVisitacao>> {
+  await requireUser();
+  return _getVisitadosPorPotencialCached(distrito, setor, classificacao, ciclo);
+}
+
+const _getVisitadosPorPotencialCached = cacheLoader(
+  ['visitados-por-potencial'],
+  async (
+    distrito: string,
+    setor: string,
+    classificacao: string,
+    ciclo: string,
+  ): Promise<Record<number, PotencialVisitacao>> => {
   const vazio: Record<number, PotencialVisitacao> = {
     1: { total: 0, visitados: 0 },
     2: { total: 0, visitados: 0 },
@@ -53,7 +74,6 @@ export async function getVisitadosPorPotencial(
     5: { total: 0, visitados: 0 },
   };
   try {
-    await requireUser();
     if (!db) return vazio;
 
     const dbCiclo = ciclo !== 'Todos'
@@ -116,7 +136,9 @@ export async function getVisitadosPorPotencial(
     console.error('getVisitadosPorPotencial error:', e);
     return vazio;
   }
-}
+  },
+  1800,
+);
 
 export async function getSegmentacaoData(
   marcaId: number,
@@ -125,8 +147,20 @@ export async function getSegmentacaoData(
   setor: string = 'Todos',
   ciclo: string = 'Todos'
 ) {
+  await requireUser();
+  return _getSegmentacaoDataCached(marcaId, classificacao, distrito, setor, ciclo);
+}
+
+const _getSegmentacaoDataCached = cacheLoader(
+  ['segmentacao-data'],
+  async (
+    marcaId: number,
+    classificacao: string,
+    distrito: string,
+    setor: string,
+    ciclo: string,
+  ) => {
   try {
-    await requireUser();
     if (!db) return [];
 
     const dbCiclo = ciclo !== 'Todos'
@@ -199,4 +233,6 @@ export async function getSegmentacaoData(
     console.error('getSegmentacaoData error:', e);
     return [];
   }
-}
+  },
+  1800,
+);

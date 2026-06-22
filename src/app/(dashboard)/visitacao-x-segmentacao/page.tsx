@@ -85,7 +85,7 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
           }
         });
 
-        const order = ['PROTEGER', 'CONQUISTAR', 'MANTER', 'OBSERVAR', 'SEM SEGMENTAÇÃO'];
+        const order = ['CONQUISTAR', 'PROTEGER', 'MANTER', 'OBSERVAR', 'SEM SEGMENTAÇÃO'];
         result.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
 
         let totalSim = 0;

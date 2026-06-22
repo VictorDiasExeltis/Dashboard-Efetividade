@@ -44,6 +44,7 @@ interface ExecutiveDashboardProps {
       last_ciclo?: string;
       prev_ciclo?: string;
       diasRestantes?: number;
+      diasUteisCiclo?: Record<string, number>;
     };
     chartData: any[];
     availableSetores: string[];
@@ -151,14 +152,30 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
             {(() => {
               const selected: string[] | undefined = (kpis as any).selected_ciclos;
               const last: string | undefined = kpis.last_ciclo;
+              const diasUteisCiclo = kpis.diasUteisCiclo ?? {};
               const fmt = (c: string) => `Ciclo ${c.slice(-2)}`;
-              if (filtroCiclo === 'Todos' || !filtroCiclo) {
-                return `Dados: ${last ? fmt(last) : 'último ciclo'}`;
-              }
-              const lista = selected && selected.length > 0
-                ? selected
-                : filtroCiclo.split(',').filter(Boolean);
-              return `Dados: ${lista.map(fmt).join(', ')}`;
+
+              // Ciclos efetivamente exibidos (mesma regra do label).
+              const ciclosExibidos = (filtroCiclo === 'Todos' || !filtroCiclo)
+                ? (last ? [last] : [])
+                : (selected && selected.length > 0
+                    ? selected
+                    : filtroCiclo.split(',').filter(Boolean));
+
+              const label = ciclosExibidos.length > 0
+                ? ciclosExibidos.map(fmt).join(', ')
+                : 'último ciclo';
+
+              // Dias úteis somados dos ciclos exibidos. Meta ideal = 6pp por
+              // dia útil (90% para 15 dias), capada em 90%.
+              const dias = ciclosExibidos.reduce(
+                (acc, c) => acc + (diasUteisCiclo[c] ?? 0), 0
+              );
+              const sufixo = dias > 0
+                ? ` · ${dias} dias úteis · meta ideal ${Math.min(90, 6 * dias)}%`
+                : '';
+
+              return `Dados: ${label}${sufixo}`;
             })()}
           </p>
         </div>

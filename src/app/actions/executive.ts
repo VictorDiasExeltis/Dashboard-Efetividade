@@ -3,6 +3,7 @@
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
 import { requireUser } from '@/src/lib/supabase/auth';
+import { cacheLoader } from './_cache';
 
 export async function getExecutiveMetrics(
   distrito: string = 'Todos',
@@ -10,8 +11,14 @@ export async function getExecutiveMetrics(
   setor: string = 'Todos',
   ciclos: string[] = []
 ) {
+  await requireUser();
+  return _getExecutiveMetricsCached(distrito, estrutura, setor, ciclos);
+}
+
+const _getExecutiveMetricsCached = cacheLoader(
+  ['executive-metrics'],
+  async (distrito: string, estrutura: string, setor: string, ciclos: string[]) => {
   try {
-    await requireUser();
     if (!db) {
       throw new Error("Database not connected");
     }
@@ -24,6 +31,20 @@ export async function getExecutiveMetrics(
       SELECT get_executive_kpis(${estrutura}, ${distrito}, ${setor}, ${ciclosParam}) as data
     `);
     const kpiData = (kpiDataRaw[0] as any).data ?? {};
+
+    // Dias úteis por ciclo. Pros ciclos reais a dim_calendario já contém só
+    // dias úteis (feriados removidos na carga); o filtro seg-sex é defensivo
+    // contra o bucket especial 202600 que inclui fins de semana.
+    const calRows = await db.execute(sql`
+      SELECT ciclo,
+             count(*) FILTER (WHERE extract(dow FROM data) NOT IN (0, 6))::int AS dias
+      FROM dim_calendario
+      GROUP BY ciclo
+    `).catch(() => [] as any[]);
+    const diasUteisCiclo: Record<string, number> = {};
+    for (const r of calRows as any[]) {
+      if (r.ciclo != null) diasUteisCiclo[String(r.ciclo)] = Number(r.dias);
+    }
 
     // Setores disponíveis para popular o filtro quando estrutura=Setor
     const setoresResult = (estrutura === 'Setor' && distrito !== 'Todos')
@@ -57,6 +78,7 @@ export async function getExecutiveMetrics(
         last_ciclo: kpiData.last_ciclo,
         prev_ciclo: kpiData.prev_ciclo,
         diasRestantes: 8,
+        diasUteisCiclo,
       },
       chartData: [] as any[],
       availableSetores: setoresResult.map((s: any) => s.nome_setor).filter(Boolean) as string[],
@@ -65,11 +87,19 @@ export async function getExecutiveMetrics(
     console.error('getExecutiveMetrics error:', e);
     throw e;
   }
-}
+  },
+  1800,
+);
 
 export async function getAvailableSetores(distrito: string = 'Todos') {
+  await requireUser();
+  return _getAvailableSetoresCached(distrito);
+}
+
+const _getAvailableSetoresCached = cacheLoader(
+  ['available-setores'],
+  async (distrito: string) => {
   try {
-    await requireUser();
     if (!db) return [];
 
     const result = distrito !== 'Todos'
@@ -91,4 +121,6 @@ export async function getAvailableSetores(distrito: string = 'Todos') {
     console.error('getAvailableSetores error:', e);
     return [];
   }
-}
+  },
+  1800,
+);

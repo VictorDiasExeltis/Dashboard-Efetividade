@@ -3,6 +3,7 @@
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
 import { requireUser } from '@/src/lib/supabase/auth';
+import { cacheLoader } from './_cache';
 
 export interface SetorHierarquia {
   cod_setor: number;
@@ -15,8 +16,14 @@ export interface SetorHierarquia {
 // Usado hoje só para popular a tela de Análise Diária com a lista real de
 // setores; as métricas de visitação ainda são mock até a base diária subir.
 export async function getSetoresHierarquia(): Promise<SetorHierarquia[]> {
+  await requireUser();
+  return _getSetoresHierarquiaCached();
+}
+
+const _getSetoresHierarquiaCached = cacheLoader(
+  ['setores-hierarquia'],
+  async (): Promise<SetorHierarquia[]> => {
   try {
-    await requireUser();
     if (!db) return [];
     const result = await db.execute(sql`
       SELECT cod_setor, nome_setor, nome_distrito, nome_rep
@@ -34,7 +41,9 @@ export async function getSetoresHierarquia(): Promise<SetorHierarquia[]> {
     console.error('getSetoresHierarquia error:', e);
     return [];
   }
-}
+  },
+  1800,
+);
 
 // ---------------------------------------------------------------------------
 // Análise diária por setor — cruza fato_diario com o ciclo atual (dim_calendario),
@@ -94,9 +103,71 @@ function classificar(
   return 'acao';
 }
 
-export async function getAnaliseDiaria(): Promise<AnaliseDiariaRow[]> {
+// Progresso do ciclo atual (nível calendário, não por setor): em que dia útil
+// do ciclo estamos e quantos faltam. Usa o ciclo do dia útil mais recente
+// até hoje, então funciona mesmo se aberto em fim de semana/feriado.
+export interface CicloProgresso {
+  ciclo: string | null;
+  dias_uteis: number;     // total de dias úteis do ciclo
+  dia_atual: number;      // dias úteis decorridos até hoje (inclusive)
+  dias_restantes: number; // dias_uteis - dia_atual
+}
+
+export async function getCicloProgresso(): Promise<CicloProgresso> {
+  await requireUser();
+  return _getCicloProgressoCached();
+}
+
+const _getCicloProgressoCached = cacheLoader(
+  ['ciclo-progresso'],
+  async (): Promise<CicloProgresso> => {
+  const vazio: CicloProgresso = { ciclo: null, dias_uteis: 0, dia_atual: 0, dias_restantes: 0 };
   try {
-    await requireUser();
+    if (!db) return vazio;
+    const result = await db.execute(sql`
+      WITH hoje AS (
+        SELECT ciclo, MAX(data) AS ref
+        FROM dim_calendario
+        WHERE data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date
+        GROUP BY ciclo
+        ORDER BY ref DESC
+        LIMIT 1
+      )
+      SELECT
+        h.ciclo,
+        (SELECT COUNT(*) FROM dim_calendario WHERE ciclo = h.ciclo)::int AS dias_uteis,
+        (SELECT COUNT(*) FROM dim_calendario
+          WHERE ciclo = h.ciclo
+            AND data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date)::int AS dia_atual
+      FROM hoje h
+    `);
+    const r = result[0] as any;
+    if (!r) return vazio;
+    const dias_uteis = Number(r.dias_uteis) || 0;
+    const dia_atual  = Number(r.dia_atual) || 0;
+    return {
+      ciclo: (r.ciclo as string) ?? null,
+      dias_uteis,
+      dia_atual,
+      dias_restantes: Math.max(dias_uteis - dia_atual, 0),
+    };
+  } catch (e) {
+    console.error('getCicloProgresso error:', e);
+    return vazio;
+  }
+  },
+  1800,
+);
+
+export async function getAnaliseDiaria(): Promise<AnaliseDiariaRow[]> {
+  await requireUser();
+  return _getAnaliseDiariaCached();
+}
+
+const _getAnaliseDiariaCached = cacheLoader(
+  ['analise-diaria'],
+  async (): Promise<AnaliseDiariaRow[]> => {
+  try {
     if (!db) return [];
     const result = await db.execute(sql`
       WITH hoje AS (
@@ -183,4 +254,7 @@ export async function getAnaliseDiaria(): Promise<AnaliseDiariaRow[]> {
     console.error('getAnaliseDiaria error:', e);
     return [];
   }
-}
+  },
+  // fato_diario muda na carga diária — TTL curto (5min) pra manter fresco.
+  300,
+);

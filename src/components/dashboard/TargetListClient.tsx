@@ -11,7 +11,6 @@ import {
   Users,
   TrendingDown,
   Flame,
-  Layers,
   ChevronLeft,
   ChevronRight,
   HelpCircle,
@@ -35,7 +34,7 @@ const ROWS_PER_PAGE = 12;
 
 // Chaves de ordenação aceitas pelo header da tabela. As marcas reaproveitam
 // a chave do PRODUCT_COLUMNS (slinda, regenesis...) e ordenam pela "ranking"
-// de segmentação (PROTEGER = 1, melhor; nulos vão pro fim).
+// de segmentação (CONQUISTAR = 1, melhor; nulos vão pro fim).
 type SortKey =
   | 'nome'
   | 'score'
@@ -49,8 +48,8 @@ type SortKey =
 type SortDir = 'asc' | 'desc';
 
 const SEGMENTACAO_RANK: Record<string, number> = {
-  PROTEGER: 1,
-  CONQUISTAR: 2,
+  CONQUISTAR: 1,
+  PROTEGER: 2,
   MANTER: 3,
   OBSERVAR: 4,
 };
@@ -142,6 +141,14 @@ function formatScoreK(score: number | null | undefined): string {
     return v.replace('.', ',') + 'k';
   }
   return Math.round(score).toString();
+}
+
+// Rank de importância do potencial (não é o valor numérico): 1 > 2 > 3 > 4 > 5 > 0.
+// Quanto menor o rank, MAIS importante. 0 é o menos importante (rank 6).
+// Retorna null pra valores ausentes — o sort joga esses pro fim.
+function potencialRank(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  return value === 0 ? 6 : value;
 }
 
 // Escala de potencial: 1 = MAIOR potencial, 5 = MENOR potencial.
@@ -268,10 +275,16 @@ export function TargetListClient() {
         return (va - vb) * sign;
       }
       if (sortKey === 'potencial') {
-        // potencial: 1 = maior, 5 = menor. null vai pro fim independente da direção.
-        const va = a.potencial ?? 99;
-        const vb = b.potencial ?? 99;
-        return (va - vb) * sign;
+        // Importância (não valor numérico): 1 > 2 > 3 > 4 > 5 > 0.
+        // desc = maior→menor importância (1,2,3,4,5,0); asc = inverso (0,5,4,3,2,1).
+        // 0 é o MENOS importante (rank 6); null vai pro fim independente da direção.
+        const ra = potencialRank(a.potencial);
+        const rb = potencialRank(b.potencial);
+        if (ra === null && rb === null) return 0;
+        if (ra === null) return 1;
+        if (rb === null) return -1;
+        // -sign: em desc (sign -1) ordena rank crescente → 1,2,3,4,5,0.
+        return (ra - rb) * -sign;
       }
       // Coluna de marca: usa o ranking da segmentação. asc = melhores antes
       // (PROTEGER); desc = piores antes.
@@ -290,7 +303,7 @@ export function TargetListClient() {
       return;
     }
     setSortKey(key);
-    setSortDir(key === 'nome' ? 'asc' : key === 'score' ? 'desc' : 'asc');
+    setSortDir(key === 'nome' ? 'asc' : key === 'score' || key === 'potencial' ? 'desc' : 'asc');
   }
 
   // Reset paginação quando sort muda
@@ -337,14 +350,6 @@ export function TargetListClient() {
     (d) => d.potencial != null && d.potencial >= 1 && d.potencial <= 2
   ).length;
 
-  // Multi-marca não visitado: médicos com segmentação ativa em ≥3 das 5 marcas.
-  // Generaliza o antigo "PROTEGER sem visita" — qualquer segmentação válida
-  // (não-nula e diferente de '-') conta. São os alvos estratégicos de portfólio.
-  const multiMarcaNaoVisitado = doctors.filter((d) => {
-    const segs = [d.slinda, d.regenesis, d.gynpro, d.gynotran, d.hemolip, d.vizuria];
-    return segs.filter((s) => s && s !== '-').length >= 3;
-  }).length;
-
   const kpiCards = [
     {
       title: "Total sem Visita",
@@ -376,15 +381,6 @@ export function TargetListClient() {
       color: "text-purple-600",
       bg: "bg-purple-50",
       tooltip: "Médicos sem visitas nos últimos 3 ciclos com alto potencial de prescrição (potencial 1 ou 2)."
-    },
-    {
-      title: "Multi-marca Não Visitado",
-      value: multiMarcaNaoVisitado.toLocaleString('pt-BR'),
-      description: "Não-visitados com segmentação ativa em 3+ marcas",
-      icon: Layers,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
-      tooltip: "Médicos sem visitas nos últimos 3 ciclos com segmentação ativa em 3 ou mais marcas de produtos simultaneamente."
     }
   ];
 
@@ -392,7 +388,7 @@ export function TargetListClient() {
     <div className="space-y-6 p-6">
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">
         {kpiCards.map((kpi, idx) => (
           <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white">
             <CardContent className="p-6">
@@ -472,7 +468,7 @@ export function TargetListClient() {
             <thead className="text-[10px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase tracking-wider">
               <tr>
                 <th className="px-2 py-2.5 font-medium">
-                  <SortHeader label="Médico / CRM" myKey="nome" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} />
+                  <SortHeader label="Médico" myKey="nome" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} />
                 </th>
                 {PRODUCT_COLUMNS.map((col) => (
                   <th key={col.key} className="px-2 py-2.5 font-medium text-center">
@@ -521,6 +517,11 @@ export function TargetListClient() {
                   return (
                     <tr key={doc.crmuf} className="group transition-colors hover:bg-slate-50/80">
                       <td className="px-2 py-2.5">
+                        {(doc.nome_distrito || doc.nome_setor) && (
+                          <div className="text-[9px] text-blue-600 font-medium uppercase tracking-wide mb-0.5 truncate">
+                            {[doc.nome_distrito, doc.nome_setor].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
                         <div className="font-semibold text-slate-900" title={doc.nome_medico}>{abreviaNomeMeio(doc.nome_medico)}</div>
                         <div className="text-[10px] text-slate-500 font-medium mt-0.5">
                           {doc.crmuf}{doc.especialidade ? <span className="text-slate-400"> – {doc.especialidade}</span> : null}

@@ -1,16 +1,26 @@
 'use server';
 
+import { unstable_cache } from 'next/cache';
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
 import { requireUser } from '@/src/lib/supabase/auth';
+import { cacheLoader } from './_cache';
 import type { MedicoNaoVisitado } from './medicos.types';
 
+// A query é pesada (~1-3s: anti-join checa "sem visita em 3 ciclos" por médico)
+// e os dados só mudam na carga de ciclo. Cacheia por território; revalida em
+// 30min. requireUser fica FORA do cache (auth precisa rodar sempre).
 export async function getMedicosNaoVisitados(
   distrito: string = 'Todos',
   setor:    string = 'Todos'
 ): Promise<MedicoNaoVisitado[]> {
+  await requireUser();
+  return fetchMedicosNaoVisitadosCached(distrito, setor);
+}
+
+const fetchMedicosNaoVisitadosCached = unstable_cache(
+  async (distrito: string, setor: string): Promise<MedicoNaoVisitado[]> => {
   try {
-    await requireUser();
     if (!db) return [];
 
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')
@@ -87,7 +97,10 @@ export async function getMedicosNaoVisitados(
     console.error('getMedicosNaoVisitados error:', e);
     return [];
   }
-}
+  },
+  ['medicos-nao-visitados'],
+  { revalidate: 1800 },
+);
 
 // Total de médicos ativos vinculados ao território (via histórico de visitas).
 // Denominador para a "Taxa de Abandono". Usa a mesma definição de vínculo
@@ -96,8 +109,14 @@ export async function getTotalMedicosAtivosTerritorio(
   distrito: string = 'Todos',
   setor:    string = 'Todos'
 ): Promise<number> {
+  await requireUser();
+  return _getTotalMedicosAtivosCached(distrito, setor);
+}
+
+const _getTotalMedicosAtivosCached = cacheLoader(
+  ['total-medicos-ativos'],
+  async (distrito: string, setor: string): Promise<number> => {
   try {
-    await requireUser();
     if (!db) return 0;
 
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')
@@ -132,4 +151,6 @@ export async function getTotalMedicosAtivosTerritorio(
     console.error('getTotalMedicosAtivosTerritorio error:', e);
     return 0;
   }
-}
+  },
+  1800,
+);

@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Users, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Users,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
+} from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -179,6 +187,8 @@ export function TabelaRepresentantes({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pagina, setPagina] = useState(1);
+  // Ordenação da coluna "Dias Abonados": null = ordem original (por nome)
+  const [ordemAbonados, setOrdemAbonados] = useState<'desc' | 'asc' | null>(null);
 
   // ─── Fetch ────────────────────────────────────────────────
 
@@ -232,13 +242,34 @@ export function TabelaRepresentantes({
     [rawDados, filtroCiclo]
   );
 
-  const totalPaginas = Math.max(1, Math.ceil(dadosFiltrados.length / ROWS_PER_PAGE));
-  const dadosPaginados = dadosFiltrados.slice(
+  // Aplica ordenação por "Dias Abonados" sem mutar o array original.
+  const dadosOrdenados = useMemo(() => {
+    if (!ordemAbonados) return dadosFiltrados;
+    const fator = ordemAbonados === 'desc' ? -1 : 1;
+    return [...dadosFiltrados].sort(
+      (a, b) => (a.diasAbonados - b.diasAbonados) * fator
+    );
+  }, [dadosFiltrados, ordemAbonados]);
+
+  // Cicla a ordenação: padrão → desc → asc → padrão.
+  const alternarOrdemAbonados = useCallback(() => {
+    setOrdemAbonados((atual) =>
+      atual === null ? 'desc' : atual === 'desc' ? 'asc' : null
+    );
+  }, []);
+
+  // Volta pra primeira página ao trocar a ordenação.
+  useEffect(() => {
+    setPagina(1);
+  }, [ordemAbonados]);
+
+  const totalPaginas = Math.max(1, Math.ceil(dadosOrdenados.length / ROWS_PER_PAGE));
+  const dadosPaginados = dadosOrdenados.slice(
     (pagina - 1) * ROWS_PER_PAGE,
     pagina * ROWS_PER_PAGE
   );
-  const inicioPagina = dadosFiltrados.length === 0 ? 0 : (pagina - 1) * ROWS_PER_PAGE + 1;
-  const fimPagina = Math.min(pagina * ROWS_PER_PAGE, dadosFiltrados.length);
+  const inicioPagina = dadosOrdenados.length === 0 ? 0 : (pagina - 1) * ROWS_PER_PAGE + 1;
+  const fimPagina = Math.min(pagina * ROWS_PER_PAGE, dadosOrdenados.length);
 
   // ─── Header compartilhado ────────────────────────────────
 
@@ -330,7 +361,30 @@ export function TabelaRepresentantes({
               <th className="px-2 py-2 font-medium">Setor</th>
               <th className="px-2 py-2 font-medium">Distrito</th>
               <th className="px-2 py-2 font-medium text-center">Dias Trabalhados</th>
-              <th className="px-2 py-2 font-medium text-center">Dias Abonados</th>
+              <th className="px-2 py-2 font-medium text-center">
+                <button
+                  type="button"
+                  onClick={alternarOrdemAbonados}
+                  className="inline-flex items-center gap-1 mx-auto uppercase tracking-wider hover:text-slate-700 transition-colors"
+                  title="Ordenar por dias abonados"
+                  aria-label={
+                    ordemAbonados === 'desc'
+                      ? 'Ordenado do maior para o menor — clique para inverter'
+                      : ordemAbonados === 'asc'
+                        ? 'Ordenado do menor para o maior — clique para limpar'
+                        : 'Sem ordenação — clique para ordenar do maior para o menor'
+                  }
+                >
+                  Dias Abonados
+                  {ordemAbonados === 'desc' ? (
+                    <ArrowDown className="h-3 w-3 text-blue-600" />
+                  ) : ordemAbonados === 'asc' ? (
+                    <ArrowUp className="h-3 w-3 text-blue-600" />
+                  ) : (
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  )}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -376,9 +430,9 @@ export function TabelaRepresentantes({
       {/* ─── Paginação ─────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50/50">
         <p className="text-xs text-slate-500">
-          {dadosFiltrados.length === 0
+          {dadosOrdenados.length === 0
             ? 'Sem resultados'
-            : `${inicioPagina}–${fimPagina} de ${dadosFiltrados.length} representantes`}
+            : `${inicioPagina}–${fimPagina} de ${dadosOrdenados.length} representantes`}
         </p>
         <div className="flex items-center gap-1">
           <button

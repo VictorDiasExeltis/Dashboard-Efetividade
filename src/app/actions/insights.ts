@@ -3,6 +3,7 @@
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
 import { requireUser } from '@/src/lib/supabase/auth';
+import { cacheLoader } from './_cache';
 
 // Métricas extras por setor (ciclo atual) que vêm de fato_visitas / fato_amostras
 // / fato_segmentacao / dim_medicos — complementam o que já sai de getAnaliseDiaria
@@ -23,8 +24,14 @@ export interface InsightExtrasResult {
 // em fato_visitas (auto-detectado) — pode diferir do ciclo agregado do fato_diario.
 // Quando o detalhe do ciclo atual subir, passa a usá-lo sozinho.
 export async function getInsightsExtras(): Promise<InsightExtrasResult> {
+  await requireUser();
+  return _getInsightsExtrasCached();
+}
+
+const _getInsightsExtrasCached = cacheLoader(
+  ['insights-extras'],
+  async (): Promise<InsightExtrasResult> => {
   try {
-    await requireUser();
     if (!db) return { cicloDetalhe: null, rows: [] };
     const result = await db.execute(sql`
       WITH cd AS (
@@ -80,4 +87,6 @@ export async function getInsightsExtras(): Promise<InsightExtrasResult> {
     console.error('getInsightsExtras error:', e);
     return { cicloDetalhe: null, rows: [] };
   }
-}
+  },
+  1800,
+);

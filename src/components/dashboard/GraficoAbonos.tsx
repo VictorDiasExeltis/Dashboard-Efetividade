@@ -306,7 +306,7 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Clock className="h-5 w-5 text-violet-600" />
-            Motivos de Abono
+            Motivos de Absenteísmo
           </CardTitle>
           <CardDescription className="text-slate-500">
             Carregando motivos de ausência...
@@ -334,7 +334,7 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-red-500" />
-            Motivos de Abono
+            Motivos de Absenteísmo
           </CardTitle>
           <CardDescription className="text-red-500">
             Não foi possível carregar os dados
@@ -366,7 +366,7 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Clock className="h-5 w-5 text-violet-600" />
-            Motivos de Abono
+            Motivos de Absenteísmo
           </CardTitle>
           <CardDescription className="text-slate-500">
             Nenhum abono registrado
@@ -390,7 +390,7 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
       <CardHeader>
         <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <Clock className="h-5 w-5 text-violet-600" />
-          Motivos de Abono
+          Motivos de Absenteísmo
         </CardTitle>
         <CardDescription className="text-slate-500">
           Motivos mais frequentes (em dias)

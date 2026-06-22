@@ -3,6 +3,7 @@
 import { db } from '@/src/lib/db';
 import { sql } from 'drizzle-orm';
 import { requireUser } from '@/src/lib/supabase/auth';
+import { cacheLoader } from './_cache';
 
 export async function getAmostrasData(
   distrito: string = 'Todos',
@@ -15,8 +16,14 @@ export async function getAmostrasData(
   totalAmostras: number;
   totalMedicosPainel: number;
 }> {
+  await requireUser();
+  return _getAmostrasDataCached(distrito, setor, ciclo, produto);
+}
+
+const _getAmostrasDataCached = cacheLoader(
+  ['amostras-data'],
+  async (distrito: string, setor: string, ciclo: string, produto: string) => {
   try {
-    await requireUser();
     if (!db) return { bySegmentacao: [], byClassificacao: [], totalAmostras: 0, totalMedicosPainel: 0 };
 
     // Valores parametrizados (sql`${v}` vira bind param) — nunca interpolar
@@ -99,8 +106,8 @@ export async function getAmostrasData(
           ${produtoFiltro}
         GROUP BY COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
         ORDER BY CASE COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
-          WHEN 'PROTEGER'   THEN 1
-          WHEN 'CONQUISTAR' THEN 2
+          WHEN 'CONQUISTAR' THEN 1
+          WHEN 'PROTEGER'   THEN 2
           WHEN 'MANTER'     THEN 3
           WHEN 'OBSERVAR'   THEN 4
           ELSE 5
@@ -165,4 +172,6 @@ export async function getAmostrasData(
     console.error('getAmostrasData error:', e);
     return { bySegmentacao: [], byClassificacao: [], totalAmostras: 0, totalMedicosPainel: 0 };
   }
-}
+  },
+  1800,
+);

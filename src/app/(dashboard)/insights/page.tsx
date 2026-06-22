@@ -16,6 +16,8 @@ import { useLayout } from '@/src/context/LayoutContext';
 import { InsightsFilters } from '@/src/components/dashboard/InsightsFilters';
 import { getAnaliseDiaria, type AnaliseDiariaRow } from '@/src/app/actions/analise-diaria';
 import { getInsightsExtras } from '@/src/app/actions/insights';
+import { getMedicosNaoVisitados } from '@/src/app/actions/medicos';
+import type { MedicoNaoVisitado } from '@/src/app/actions/medicos.types';
 
 const TOP_N = 3;
 
@@ -109,6 +111,8 @@ export default function InsightsPage() {
   const [base, setBase] = useState<AnaliseDiariaRow[]>([]);
   const [extras, setExtras] = useState<Record<number, { alta: number; amostras: number; semSeg: number }>>({});
   const [cicloDetalhe, setCicloDetalhe] = useState<string | null>(null);
+  const [altoPotencial, setAltoPotencial] = useState<MedicoNaoVisitado[]>([]);
+  const [loadingMed, setLoadingMed] = useState(true);
 
   const distrito = searchParams.get('distrito') || 'Todos';
 
@@ -138,6 +142,23 @@ export default function InsightsPage() {
         setCicloDetalhe(ex.cicloDetalhe);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Médicos potencial 1-3 sem visita nos últimos 3 ciclos (lista de nomes).
+  // Busca UMA vez (todos os distritos) e filtra no client — evita re-rodar a
+  // query pesada a cada troca de distrito.
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingMed(true);
+    getMedicosNaoVisitados('Todos', 'Todos')
+      .then((meds) => {
+        if (cancelled) return;
+        setAltoPotencial(
+          meds.filter((m) => m.potencial != null && m.potencial >= 1 && m.potencial <= 3),
+        );
+      })
+      .finally(() => { if (!cancelled) setLoadingMed(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -221,11 +242,67 @@ export default function InsightsPage() {
     ];
   }, [setores, mediaDistrito, mediaAmostras, periodoDetalhe]);
 
+  // Filtra por distrito (client-side) + ordena por potencial (1 = maior).
+  const altoPotencialOrdenado = useMemo(
+    () => altoPotencial
+      .filter((m) => distrito === 'Todos' || m.nome_distrito === distrito)
+      .sort((a, b) => (a.potencial ?? 9) - (b.potencial ?? 9)),
+    [altoPotencial, distrito],
+  );
+
+  const POT_BADGE: Record<number, string> = {
+    1: 'bg-rose-100 text-rose-700 border-rose-200',
+    2: 'bg-orange-100 text-orange-700 border-orange-200',
+    3: 'bg-amber-100 text-amber-800 border-amber-200',
+  };
+
   return (
     <div className="p-6">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {cards.map((def, i) => <InsightCard key={i} def={def} loading={loading} />)}
       </div>
+
+      {/* Médicos de alto potencial (1-3) sem visita nos últimos 3 ciclos — lista de nomes */}
+      <Card className="border border-slate-200 shadow-sm bg-white mt-4">
+        <CardContent className="p-5">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-rose-50 shrink-0"><UserX className="h-5 w-5 text-rose-600" /></div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold text-slate-800 text-sm">Alto potencial não visitado</h3>
+                <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">
+                  {altoPotencialOrdenado.length} médicos
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">Potencial 1 a 3, sem visita nos últimos 3 ciclos{distrito !== 'Todos' ? ` — ${distrito}` : ''}</p>
+            </div>
+          </div>
+
+          {loadingMed ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" />)}
+            </div>
+          ) : altoPotencialOrdenado.length === 0 ? (
+            <p className="text-xs text-slate-400 py-4 text-center">Nenhum médico potencial 1-3 sem visita.</p>
+          ) : (
+            <div className="max-h-[420px] overflow-y-auto pr-1">
+              <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                {altoPotencialOrdenado.map((m) => (
+                  <li key={m.crmuf} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-100 bg-slate-50/60">
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md border text-[10px] font-semibold tabular-nums shrink-0 ${POT_BADGE[m.potencial ?? 0] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                      {m.potencial}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-slate-900 text-xs truncate" title={m.nome_medico}>{abreviarNome(m.nome_medico)}</div>
+                      <div className="text-[10px] text-slate-500 truncate">{m.nome_setor ?? '—'}{m.nome_distrito ? ` · ${m.nome_distrito}` : ''}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <p className="text-xs text-slate-400 mt-4">
         Insights de visita (alta categoria, amostras, segmentação) usam o último ciclo com dados detalhados
         {periodoDetalhe ? ` (${periodoDetalhe})` : ''}. Os demais usam o ciclo atual.

@@ -200,10 +200,12 @@ function AlocacaoDeRecursosContent() {
     return () => setHeaderState({});
   }, [setHeaderState, availableSetores]);
 
-  // Painel = médicos únicos ativos. Usar isso evita a duplicação que ocorre
-  // quando o mesmo médico aparece em várias segmentações (uma por marca).
-  const mediaGeral       = totalMedicosPainel > 0
-    ? (totalAmostras / totalMedicosPainel).toFixed(1)
+  // Denominador da média = soma dos médicos que receberam amostra em cada
+  // segmentação (respeita o filtro atual). Médico multi-marca conta uma vez
+  // por segmentação — duplicação intencional, casa com a linha do gráfico.
+  const medicosComAmostra = segData.reduce((acc, s) => acc + s.medicos, 0);
+  const mediaGeral       = medicosComAmostra > 0
+    ? (totalAmostras / medicosComAmostra).toFixed(1)
     : '–';
   const totalAmostrasFmt = totalAmostras.toLocaleString('pt-BR');
   const totalMedicosFmt  = totalMedicosPainel.toLocaleString('pt-BR');
@@ -225,7 +227,7 @@ function AlocacaoDeRecursosContent() {
       icon: Package,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
-      tooltip: "Quantidade média de amostras entregues por médico do painel (Total de Amostras / Total de Médicos do Painel)."
+      tooltip: "Quantidade média de amostras entregues por médico atendido (Total de Amostras / soma dos médicos que receberam amostra em cada segmentação, conforme o filtro)."
     },
     {
       title: "Total de Amostras Entregues",
@@ -240,6 +242,16 @@ function AlocacaoDeRecursosContent() {
 
   return (
     <div className="p-6 space-y-6">
+
+      {/* Observação: orienta selecionar um produto quando nenhum está filtrado */}
+      <div className="flex items-center px-1">
+        <div className="flex items-center gap-2 text-slate-500">
+          <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+            Obs: Recomendado sempre selecionar um produto para filtrar os dados.
+          </p>
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">

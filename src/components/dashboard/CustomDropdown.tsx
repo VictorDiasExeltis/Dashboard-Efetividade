@@ -125,6 +125,11 @@ export function CustomDropdown({
 
       {isOpen && (
         <div className="absolute left-0 mt-1 w-full min-w-[200px] max-h-60 overflow-y-auto bg-white border border-slate-200 shadow-lg rounded-lg z-[60] py-1">
+          {/* Dica de multi-seleção no topo do painel pra garantir visibilidade. */}
+          <div className="mb-1 px-2.5 pt-0.5 pb-1 border-b border-slate-100 text-[10px] text-slate-400 leading-tight">
+            <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-mono text-slate-600">Ctrl</kbd>
+            <span className="mx-1">+ clique para múltiplos</span>
+          </div>
           {/* Opção Padrão (Todos/Todas) */}
           <div
             onClick={(e) => handleOptionClick(defaultValue, e)}
@@ -156,12 +161,6 @@ export function CustomDropdown({
                 </div>
               );
             })}
-          {/* Dica de multi-seleção. Fica dentro do painel aberto pra não poluir
-              o filtro fechado nem competir com o label. */}
-          <div className="mt-1 px-2.5 pt-1 pb-0.5 border-t border-slate-100 text-[10px] text-slate-400 leading-tight">
-            <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-mono text-slate-600">Ctrl</kbd>
-            <span className="mx-1">+ clique para múltiplos</span>
-          </div>
         </div>
       )}
     </div>
