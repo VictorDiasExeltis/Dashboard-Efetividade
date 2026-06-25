@@ -7,6 +7,7 @@ import {
   varchar,
   date,
   uuid,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 
 // Dimensões
@@ -45,15 +46,34 @@ export const fato_segmentacao = pgTable('fato_segmentacao', {
   segmentacao: varchar('segmentacao'),
 });
 
-// Carga diária por setor — valores cumulativos "até o momento" no ciclo atual.
-// Uma linha por setor, sobrescrita a cada carga diária. Se for preciso histórico
-// diário, adicionar `data` + `ciclo` e tornar a PK composta.
+// Carga diária por setor — valores cumulativos "até o momento" no ciclo.
+// HISTÓRICO: um snapshot por setor por dia (PK composta cod_setor + data).
+// Cada carga diária empilha um novo snapshot carimbado com a data do upload;
+// recarregar o mesmo dia corrige aquele dia (upsert na PK). A tela de Análise
+// Diária lê o snapshot mais recente de cada setor dentro do ciclo atual.
 export const fato_diario = pgTable('fato_diario', {
-  cod_setor:          integer('cod_setor').primaryKey(), // FK → dim_hierarquia.cod_setor
+  cod_setor:          integer('cod_setor').notNull(),    // FK → dim_hierarquia.cod_setor
+  data:               date('data').notNull(),            // dia do snapshot (carimbado na carga)
+  ciclo:              varchar('ciclo'),                  // ciclo derivado do calendário na carga
   dias_trabalhados:   numeric('dias_trabalhados').notNull().default('0'),  // aceita frações (ex.: 8.25)
   dias_abonados:      numeric('dias_abonados').notNull().default('0'),     // aceita frações
   visitas_realizadas: integer('visitas_realizadas').notNull().default(0),
   painel:             integer('painel'),                                   // médicos no painel do rep (~170-200+)
+}, (t) => [
+  primaryKey({ columns: [t.cod_setor, t.data] }),
+]);
+
+// Log de cargas — histórico de toda carga feita pela Central de Cargas:
+// quem carregou, quando, qual tabela, quantas linhas e sucesso/erro.
+export const log_cargas = pgTable('log_cargas', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tabela_destino:     varchar('tabela_destino').notNull(),
+  usuario_email:      varchar('usuario_email'),
+  arquivo_nome:       varchar('arquivo_nome'),
+  linhas_processadas: integer('linhas_processadas').notNull().default(0),
+  linhas_afetadas:    integer('linhas_afetadas').notNull().default(0),
+  status:             varchar('status').notNull(),   // 'sucesso' | 'erro'
+  mensagem:           text('mensagem'),
 });
 
 // Metas por ciclo (substitui o antigo `produtividade_ciclo`)

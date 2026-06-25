@@ -11,11 +11,13 @@ import {
   CalendarCheck,
   Lightbulb,
   Search,
+  UploadCloud,
   X
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Input } from '@/src/components/ui/input';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
+import { podeCarregar } from '@/src/lib/cargas/config';
 
 const navItems = [
   { name: 'Cobertura e MDV', path: '/visao-executiva', icon: LayoutDashboard },
@@ -141,6 +143,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </Link>
             );
           })}
+
+          {/* Central de Cargas — visível só para usuários autorizados. A trava
+              real está nas server actions; aqui é só UX (esconder o link). */}
+          {podeCarregar(email) && (
+            <Link
+              href="/central-de-cargas"
+              onClick={onClose}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                pathname === '/central-de-cargas'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+              )}
+            >
+              <UploadCloud className="h-4 w-4" />
+              Central de Cargas
+            </Link>
+          )}
 
           <div className="mt-8">
             <button

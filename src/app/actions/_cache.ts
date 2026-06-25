@@ -18,5 +18,8 @@ export function cacheLoader<A extends unknown[], R>(
 ): (...args: A) => Promise<R> {
   return unstable_cache(loader as (...a: unknown[]) => Promise<R>, keyParts, {
     revalidate,
+    // keyParts também viram tags, então um revalidateTag(keyParts[0]) força
+    // o refresh após uma carga (ex.: a Central de Cargas invalida 'analise-diaria').
+    tags: keyParts,
   }) as (...args: A) => Promise<R>;
 }

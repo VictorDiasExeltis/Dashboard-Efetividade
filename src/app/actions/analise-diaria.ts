@@ -170,16 +170,26 @@ const _getAnaliseDiariaCached = cacheLoader(
   try {
     if (!db) return [];
     const result = await db.execute(sql`
-      WITH hoje AS (
+      WITH ciclo_atual AS (
+        -- Ciclo do último dia útil <= hoje (funciona em fim de semana/feriado).
         SELECT ciclo
         FROM dim_calendario
-        WHERE data = (now() AT TIME ZONE 'America/Sao_Paulo')::date
+        WHERE data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date
+        ORDER BY data DESC
         LIMIT 1
       ),
       du AS (
         SELECT COUNT(*)::int AS dias_uteis
         FROM dim_calendario
-        WHERE ciclo = (SELECT ciclo FROM hoje)
+        WHERE ciclo = (SELECT ciclo FROM ciclo_atual)
+      ),
+      diario AS (
+        -- Snapshot mais recente de cada setor DENTRO do ciclo atual.
+        SELECT DISTINCT ON (cod_setor)
+          cod_setor, dias_trabalhados, dias_abonados, visitas_realizadas, painel
+        FROM fato_diario
+        WHERE ciclo = (SELECT ciclo FROM ciclo_atual)
+        ORDER BY cod_setor, data DESC
       )
       SELECT
         fd.cod_setor,
@@ -189,10 +199,10 @@ const _getAnaliseDiariaCached = cacheLoader(
         fd.dias_trabalhados,
         fd.dias_abonados,
         fd.visitas_realizadas,
-        fd.painel                      AS tamanho_painel,
-        (SELECT ciclo FROM hoje)       AS ciclo,
-        (SELECT dias_uteis FROM du)    AS dias_uteis
-      FROM fato_diario fd
+        fd.painel                       AS tamanho_painel,
+        (SELECT ciclo FROM ciclo_atual) AS ciclo,
+        (SELECT dias_uteis FROM du)     AS dias_uteis
+      FROM diario fd
       JOIN dim_hierarquia dh ON dh.cod_setor = fd.cod_setor
       ORDER BY dh.nome_distrito, dh.nome_setor
     `);
