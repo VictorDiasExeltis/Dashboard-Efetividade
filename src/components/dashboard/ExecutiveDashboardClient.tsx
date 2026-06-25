@@ -69,6 +69,16 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
   // a mesma fonte. "Todos" = sem param na URL.
   const filtroCiclo = urlParams.get('ciclo') || 'Todos';
 
+  // Seleção de motivo de abono (clique no donut) → destaca reps na tabela.
+  const [abonoSel, setAbonoSel] = React.useState<{ motivo: string | null; setores: number[] }>({
+    motivo: null,
+    setores: [],
+  });
+  // Limpa a seleção quando muda território/ciclo (os dados de abono mudam).
+  React.useEffect(() => {
+    setAbonoSel({ motivo: null, setores: [] });
+  }, [filtroDistrito, filtroSetor, filtroCiclo]);
+
   React.useEffect(() => {
     setHeaderState({
       title: "Cobertura e Média de Visitação",
@@ -236,11 +246,16 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
               filtroDistrito={filtroDistrito}
               filtroSetor={filtroSetor}
               filtroCiclo={filtroCiclo}
+              motivoSelecionado={abonoSel.motivo}
+              onSelecaoMotivo={(motivo, setores) => setAbonoSel({ motivo, setores })}
             />
             <TabelaRepresentantes
               filtroDistrito={filtroDistrito}
               filtroSetor={filtroSetor}
               filtroCiclo={filtroCiclo}
+              highlightSetores={abonoSel.setores}
+              motivoHighlight={abonoSel.motivo}
+              onLimparHighlight={() => setAbonoSel({ motivo: null, setores: [] })}
             />
           </div>
         </section>

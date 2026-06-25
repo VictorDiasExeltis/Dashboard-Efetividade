@@ -51,6 +51,7 @@ export function SegmentacaoFilters() {
 
   const currentCiclo         = searchParams.get('ciclo')         || ultimoCiclo;
   const currentClassificacao = searchParams.get('classificacao') || 'Todas';
+  const currentPotencial     = searchParams.get('potencial')     || 'Todos';
   const currentEstrutura     = searchParams.get('estrutura')     || 'Distrito';
   const currentDistritoRaw   = searchParams.get('distrito')      || 'Todos';
   const currentSetor         = searchParams.get('setor')         || 'Todos';
@@ -69,6 +70,11 @@ export function SegmentacaoFilters() {
 
   const cicloOptions = useMemo(() => ciclos.map((c) => ({ label: formatCiclo(c), value: c })), [ciclos]);
   const classificacaoOptions = useMemo(() => classificacoes.map((c) => ({ label: c, value: c })), [classificacoes]);
+  // Potencial 1..5 (1 = maior). Multi-seleção via Ctrl+clique no dropdown.
+  const potencialOptions = useMemo(
+    () => [1, 2, 3, 4, 5].map((n) => ({ label: `Potencial ${n}`, value: String(n) })),
+    [],
+  );
 
   useEffect(() => {
     if (!isSetorMode) {
@@ -133,6 +139,17 @@ export function SegmentacaoFilters() {
           options={classificacaoOptions}
           defaultValue="Todas"
           disabled={!classificacoes.length}
+        />
+      </div>
+
+      {/* Potencial */}
+      <div className="flex flex-col gap-0.5 w-[100px] shrink-0">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Potencial</label>
+        <CustomDropdown
+          value={currentPotencial}
+          onChange={(v) => updateParam('potencial', v)}
+          options={potencialOptions}
+          defaultValue="Todos"
         />
       </div>
 

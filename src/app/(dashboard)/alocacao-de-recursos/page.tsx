@@ -256,7 +256,7 @@ function AlocacaoDeRecursosContent() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">
         {kpiCards.map((kpi) => (
-          <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white overflow-hidden">
+          <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className={`p-2 rounded-lg ${kpi.bg}`}>

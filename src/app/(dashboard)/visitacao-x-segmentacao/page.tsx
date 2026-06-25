@@ -40,6 +40,7 @@ interface SegmentacaoTableProps {
   distrito: string;
   setor: string;
   ciclo: string;
+  potencial: string;
 }
 
 const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
@@ -48,6 +49,7 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
   distrito,
   setor,
   ciclo,
+  potencial,
 }) => {
   const [data, setData] = useState<any[]>([]);
   const [totals, setTotals] = useState<any>({ sim: '0%', simNum: 0, nao: '0%', naoNum: 0 });
@@ -63,7 +65,7 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
 
       setLoading(true);
       try {
-        const resultRaw = await getSegmentacaoData(marcaId, classificacao, distrito, setor, ciclo);
+        const resultRaw = await getSegmentacaoData(marcaId, classificacao, distrito, setor, ciclo, potencial);
         if (cancelled) return;
 
         // Agregar duplicados como "SEM SEGMENTAÇÃO"
@@ -114,7 +116,7 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
 
     loadData();
     return () => { cancelled = true; };
-  }, [productName, classificacao, distrito, setor, ciclo]);
+  }, [productName, classificacao, distrito, setor, ciclo, potencial]);
 
   return (
     <Card className="overflow-hidden border border-slate-200">
@@ -222,6 +224,12 @@ export default function VisitacaoXSegmentacao() {
   const classificacao  = urlParams.get('classificacao') || 'Todas';
   const distrito       = urlParams.get('distrito')      || 'Todos';
   const setor          = urlParams.get('setor')         || 'Todos';
+  const potencial      = urlParams.get('potencial')     || 'Todos';
+
+  // Set de potenciais selecionados (pra destacar os KPI cards correspondentes).
+  const potSet = potencial !== 'Todos'
+    ? new Set(potencial.split(',').map((p) => p.trim()).filter(Boolean))
+    : null;
 
   const [potenciais,  setPotenciais]  = useState<Record<number, PotencialVisitacao>>({
     1: { total: 0, visitados: 0 },
@@ -279,6 +287,16 @@ export default function VisitacaoXSegmentacao() {
   return (
     <div className="p-6 space-y-6">
 
+      {/* Observação — TODO: preencher o texto definitivo */}
+      <div className="flex items-center px-1">
+        <div className="flex items-center gap-2 text-slate-500">
+          <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+            Obs: (preencher)
+          </p>
+        </div>
+      </div>
+
       {/* KPI Cards — Cobertura de visitação por nível de Potencial (1..5):
           % de médicos daquele potencial visitados no ciclo, respeitando
           território e classificação. */}
@@ -289,8 +307,16 @@ export default function VisitacaoXSegmentacao() {
           // Primeiro card alinha o tooltip à esquerda (cresce pra direita),
           // pra não bater na sidebar. Os demais alinham à direita.
           const tooltipAlign = idx === 0 ? 'left-0' : 'right-0';
+          const selecionado = !potSet || potSet.has(String(p.nivel));
           return (
-            <Card key={p.nivel} className="border border-slate-200 shadow-sm bg-white">
+            <Card
+              key={p.nivel}
+              className={`border shadow-sm bg-white transition-all ${
+                selecionado
+                  ? 'border-slate-200'
+                  : 'border-slate-100 opacity-40'
+              } ${potSet && selecionado ? 'ring-2 ring-blue-300' : ''}`}
+            >
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className={`p-2 rounded-lg ${p.bg}`}>
@@ -334,6 +360,7 @@ export default function VisitacaoXSegmentacao() {
             distrito={distrito}
             setor={setor}
             ciclo={ciclo}
+            potencial={potencial}
           />
         ))}
       </div>

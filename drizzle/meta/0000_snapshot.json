@@ -1,0 +1,298 @@
+{
+  "id": "3031c75f-582d-48ac-901b-352d7c3af3c2",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.dim_hierarquia": {
+      "name": "dim_hierarquia",
+      "schema": "",
+      "columns": {
+        "cod_setor": {
+          "name": "cod_setor",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nome_rep": {
+          "name": "nome_rep",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cod_distrito": {
+          "name": "cod_distrito",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nome_gd": {
+          "name": "nome_gd",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nome_distrito": {
+          "name": "nome_distrito",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nome_setor": {
+          "name": "nome_setor",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.dim_medicos": {
+      "name": "dim_medicos",
+      "schema": "",
+      "columns": {
+        "crmuf": {
+          "name": "crmuf",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nome_medico": {
+          "name": "nome_medico",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "classificacao": {
+          "name": "classificacao",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cod_setor": {
+          "name": "cod_setor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score": {
+          "name": "score",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_inclusao": {
+          "name": "data_inclusao",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "especialidade": {
+          "name": "especialidade",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fato_diario": {
+      "name": "fato_diario",
+      "schema": "",
+      "columns": {
+        "cod_setor": {
+          "name": "cod_setor",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "dias_trabalhados": {
+          "name": "dias_trabalhados",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "dias_abonados": {
+          "name": "dias_abonados",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "visitas_realizadas": {
+          "name": "visitas_realizadas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "painel": {
+          "name": "painel",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fato_segmentacao": {
+      "name": "fato_segmentacao",
+      "schema": "",
+      "columns": {
+        "crmuf": {
+          "name": "crmuf",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id_marca": {
+          "name": "id_marca",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "segmentacao": {
+          "name": "segmentacao",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fato_visitas": {
+      "name": "fato_visitas",
+      "schema": "",
+      "columns": {
+        "crmuf": {
+          "name": "crmuf",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cod_setor": {
+          "name": "cod_setor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ciclo": {
+          "name": "ciclo",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_visita": {
+          "name": "data_visita",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id_visita": {
+          "name": "id_visita",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.metas_ciclo": {
+      "name": "metas_ciclo",
+      "schema": "",
+      "columns": {
+        "id_meta": {
+          "name": "id_meta",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "cod_setor": {
+          "name": "cod_setor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ciclo": {
+          "name": "ciclo",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dias_trabalhados": {
+          "name": "dias_trabalhados",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tamanho_painel": {
+          "name": "tamanho_painel",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "considerar": {
+          "name": "considerar",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

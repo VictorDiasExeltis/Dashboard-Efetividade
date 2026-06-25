@@ -65,6 +65,11 @@ interface TabelaRepresentantesProps {
   // CSV de ciclos vindos do header global ("202604" ou "202604,202605").
   // "Todos" ou string vazia = sem filtro de ciclo.
   filtroCiclo?: string;
+  // Destaque vindo do clique no donut de abonos: cod_setores a realçar +
+  // o motivo selecionado (mostrado num chip) + callback pra limpar.
+  highlightSetores?: number[];
+  motivoHighlight?: string | null;
+  onLimparHighlight?: () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -182,6 +187,9 @@ export function TabelaRepresentantes({
   filtroDistrito,
   filtroSetor,
   filtroCiclo = 'Todos',
+  highlightSetores,
+  motivoHighlight = null,
+  onLimparHighlight,
 }: TabelaRepresentantesProps) {
   const [rawDados, setRawDados] = useState<DimHierarquiaRaw[]>([]);
   const [loading, setLoading] = useState(true);
@@ -263,13 +271,33 @@ export function TabelaRepresentantes({
     setPagina(1);
   }, [ordemAbonados]);
 
-  const totalPaginas = Math.max(1, Math.ceil(dadosOrdenados.length / ROWS_PER_PAGE));
-  const dadosPaginados = dadosOrdenados.slice(
+  // Set de cod_setores destacados (clique no donut de abonos). codSetor é string.
+  const highlightSet = useMemo(
+    () => new Set((highlightSetores ?? []).map(String)),
+    [highlightSetores],
+  );
+
+  // Quando há destaque, traz os reps destacados pro topo (sort estável preserva
+  // a ordem anterior dentro de cada grupo). Senão, mantém dadosOrdenados.
+  const dadosExibidos = useMemo(() => {
+    if (highlightSet.size === 0) return dadosOrdenados;
+    return [...dadosOrdenados].sort(
+      (a, b) => (highlightSet.has(String(b.codSetor)) ? 1 : 0) - (highlightSet.has(String(a.codSetor)) ? 1 : 0),
+    );
+  }, [dadosOrdenados, highlightSet]);
+
+  // Volta pra primeira página ao mudar o motivo destacado.
+  useEffect(() => {
+    setPagina(1);
+  }, [motivoHighlight]);
+
+  const totalPaginas = Math.max(1, Math.ceil(dadosExibidos.length / ROWS_PER_PAGE));
+  const dadosPaginados = dadosExibidos.slice(
     (pagina - 1) * ROWS_PER_PAGE,
     pagina * ROWS_PER_PAGE
   );
-  const inicioPagina = dadosOrdenados.length === 0 ? 0 : (pagina - 1) * ROWS_PER_PAGE + 1;
-  const fimPagina = Math.min(pagina * ROWS_PER_PAGE, dadosOrdenados.length);
+  const inicioPagina = dadosExibidos.length === 0 ? 0 : (pagina - 1) * ROWS_PER_PAGE + 1;
+  const fimPagina = Math.min(pagina * ROWS_PER_PAGE, dadosExibidos.length);
 
   // ─── Header compartilhado ────────────────────────────────
 
@@ -353,6 +381,26 @@ export function TabelaRepresentantes({
     <Card className="border-0 shadow-none rounded-none bg-transparent lg:col-span-2 flex flex-col overflow-hidden">
       {cabecalho}
 
+      {/* Chip do motivo destacado (clique no donut de abonos) */}
+      {motivoHighlight && (
+        <div className="flex items-center gap-2 px-5 py-2 bg-amber-50 border-b border-amber-100">
+          <span className="text-[11px] font-medium text-amber-800">
+            Destacando reps com abono de
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-900 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">
+            {motivoHighlight}
+            <span className="text-amber-500">· {highlightSet.size}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onLimparHighlight?.()}
+            className="ml-auto text-[11px] font-medium text-amber-700 hover:text-amber-900 underline"
+          >
+            Limpar
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto flex-1">
         <table className="w-full text-[11px] text-left">
           <thead className="text-[10px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase tracking-wider">
@@ -395,9 +443,18 @@ export function TabelaRepresentantes({
                 </td>
               </tr>
             ) : (
-              dadosPaginados.map((rep) => (
-                <tr key={rep.codSetor} className="hover:bg-slate-50/80 transition-colors">
-                   <td className="px-2 py-1.5 font-medium whitespace-nowrap text-slate-900">
+              dadosPaginados.map((rep) => {
+                const destacado = highlightSet.has(String(rep.codSetor));
+                return (
+                <tr
+                  key={rep.codSetor}
+                  className={
+                    destacado
+                      ? 'bg-amber-50 hover:bg-amber-100/70 transition-colors'
+                      : 'hover:bg-slate-50/80 transition-colors ' + (motivoHighlight ? 'opacity-50' : '')
+                  }
+                >
+                   <td className={`px-2 py-1.5 font-medium whitespace-nowrap text-slate-900 ${destacado ? 'border-l-2 border-amber-400' : ''}`}>
                     {abreviarNome(rep.nomeRep)}
                   </td>
                   <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">
@@ -421,7 +478,8 @@ export function TabelaRepresentantes({
                     </span>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   PieChart,
   Pie,
@@ -177,16 +177,23 @@ interface GraficoAbonosProps {
   filtroDistrito?: string;
   filtroSetor?: string;
   filtroCiclo?: string;
+  // Motivo selecionado (controlado pelo pai) — destaca a fatia correspondente.
+  motivoSelecionado?: string | null;
+  // Disparado ao clicar numa fatia: passa o motivo (ou null ao desmarcar) e os
+  // cod_setor que têm abono daquele motivo, pro pai destacar na tabela.
+  onSelecaoMotivo?: (motivo: string | null, codSetores: number[]) => void;
 }
 
 // ─── Componente Principal ────────────────────────────────────
 
-export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todos' }: GraficoAbonosProps) {
+export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todos', motivoSelecionado = null, onSelecaoMotivo }: GraficoAbonosProps) {
   const [dados, setDados] = useState<AbonoMotivo[]>([]);
   const [totalDias, setTotalDias] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  // Mapa motivo → cod_setores (preenchido no fetch); usado no clique da fatia.
+  const setoresPorMotivo = useRef<Record<string, number[]>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -236,7 +243,7 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
 
       let query = getSupabaseClient()
         .from('fato_abonos')
-        .select('motivo, horas_abonadas, dim_calendario!inner(ciclo)');
+        .select('motivo, horas_abonadas, cod_setor, dim_calendario!inner(ciclo)');
 
       if (codSetores !== null) {
         query = query.in('cod_setor', codSetores);
@@ -258,13 +265,21 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
         return;
       }
 
-      // Agrupar por motivo e somar horas
+      // Agrupar por motivo: soma horas + coleta os cod_setor de cada motivo.
       const agrupado: Record<string, number> = {};
+      const setoresMap: Record<string, Set<number>> = {};
       data.forEach((row: any) => {
         const motivo = row.motivo || 'Sem Motivo';
         const horas = Number(row.horas_abonadas) || 0;
         agrupado[motivo] = (agrupado[motivo] || 0) + horas;
+        const cs = Number(row.cod_setor);
+        if (!Number.isNaN(cs)) {
+          (setoresMap[motivo] ??= new Set<number>()).add(cs);
+        }
       });
+      setoresPorMotivo.current = Object.fromEntries(
+        Object.entries(setoresMap).map(([m, set]) => [m, Array.from(set)]),
+      );
 
       const sorted = Object.entries(agrupado)
         .map(([motivo, totalHoras]) => ({
@@ -425,6 +440,13 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
                       label={renderCustomLabel}
                       labelLine={false}
                       strokeWidth={0}
+                      onClick={(_, index) => {
+                        const entry = dados[index];
+                        if (!onSelecaoMotivo || !entry) return;
+                        // Clicar de novo no mesmo motivo desmarca.
+                        const novo = motivoSelecionado === entry.name ? null : entry.name;
+                        onSelecaoMotivo(novo, novo ? (setoresPorMotivo.current[novo] ?? []) : []);
+                      }}
                     >
                       {dados.map((entry, index) => (
                         <Cell
@@ -433,6 +455,8 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
                           style={{
                             filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
                             cursor: 'pointer',
+                            opacity: motivoSelecionado && entry.name !== motivoSelecionado ? 0.3 : 1,
+                            transition: 'opacity 0.2s',
                           }}
                         />
                       ))}

@@ -145,10 +145,11 @@ export async function getSegmentacaoData(
   classificacao: string = 'Todas',
   distrito: string = 'Todos',
   setor: string = 'Todos',
-  ciclo: string = 'Todos'
+  ciclo: string = 'Todos',
+  potencial: string = 'Todos'
 ) {
   await requireUser();
-  return _getSegmentacaoDataCached(marcaId, classificacao, distrito, setor, ciclo);
+  return _getSegmentacaoDataCached(marcaId, classificacao, distrito, setor, ciclo, potencial);
 }
 
 const _getSegmentacaoDataCached = cacheLoader(
@@ -159,6 +160,7 @@ const _getSegmentacaoDataCached = cacheLoader(
     distrito: string,
     setor: string,
     ciclo: string,
+    potencial: string,
   ) => {
   try {
     if (!db) return [];
@@ -195,6 +197,12 @@ const _getSegmentacaoDataCached = cacheLoader(
       ? sql`AND v.ciclo IN (${sql.join(cicloList.map((c) => sql`${c}`), sql`, `)})`
       : sql``;
 
+    // Filtro de potencial (1..5). Aceita CSV ("1,2") via Ctrl+clique.
+    const potencialList = potencial.split(',').map((p) => p.trim()).filter(Boolean);
+    const potencialWhere = potencial !== 'Todos' && potencialList.length > 0
+      ? sql`AND m.potencial IN (${sql.join(potencialList.map((p) => sql`${Number(p)}`), sql`, `)})`
+      : sql``;
+
     const resultRaw = await db.execute(sql`
       SELECT
         COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO') as label,
@@ -206,6 +214,7 @@ const _getSegmentacaoDataCached = cacheLoader(
       LEFT JOIN fato_visitas v ON v.crmuf = m.crmuf ${territorioJoin} ${cicloWhere}
       WHERE m.status = TRUE
         ${classificacaoWhere}
+        ${potencialWhere}
       GROUP BY COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
     `);
 
