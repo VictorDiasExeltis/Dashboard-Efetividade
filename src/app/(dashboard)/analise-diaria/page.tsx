@@ -283,8 +283,8 @@ export default function AnaliseDiaria() {
   // Header (título + subtítulo + filtros).
   useEffect(() => {
     setHeaderState({
-      title: 'Análise Diária',
-      subtitle: 'Desempenho diário de visitação por setor e projeção de meta',
+      title: 'Análise de Ciclo',
+      subtitle: 'Desempenho de visitação por setor no meio do ciclo e projeção de meta',
       filters: (
         <Suspense fallback={<div className="h-10 bg-slate-100 animate-pulse rounded-md" />}>
           <AnaliseDiariaFilters />

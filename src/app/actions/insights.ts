@@ -21,7 +21,7 @@ export interface InsightExtrasResult {
 }
 
 // Métricas de nível-visita por setor. Usam o ÚLTIMO ciclo com dados detalhados
-// em fato_visitas (auto-detectado) — pode diferir do ciclo agregado do fato_diario.
+// em fato_visitas (auto-detectado) — mesma regra usada em getAnaliseDiaria.
 // Quando o detalhe do ciclo atual subir, passa a usá-lo sozinho.
 export async function getInsightsExtras(): Promise<InsightExtrasResult> {
   await requireUser();

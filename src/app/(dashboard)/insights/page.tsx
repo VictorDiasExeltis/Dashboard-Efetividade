@@ -162,7 +162,7 @@ export default function InsightsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Junta base (fato_diario) + extras (visita). Aplica filtro de distrito.
+  // Junta base (fato_visitas) + extras (visita). Aplica filtro de distrito.
   const setores = useMemo<Setor[]>(() => {
     return base
       .filter((r) => distrito === 'Todos' || r.nome_distrito === distrito)

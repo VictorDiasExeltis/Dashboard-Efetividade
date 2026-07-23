@@ -29,6 +29,7 @@ export interface ColunaSpec {
   tipo: ColunaTipo;
   obrigatoria: boolean;
   aliases: string[];    // variações de cabeçalho aceitas no arquivo
+  exemplo?: string | number; // valor ilustrativo no modelo p/ download (fallback por tipo)
 }
 
 export interface CargaSpec {
@@ -49,24 +50,6 @@ export const TIPO_INFO: Record<CargaTipo, { label: string; texto: string }> = {
   upsert:         { label: 'Atualiza (upsert)',  texto: 'Cria novos registros e atualiza os existentes pela chave.' },
 };
 
-export const CARGA_FATO_DIARIO: CargaSpec = {
-  id: 'fato_diario',
-  tabela: 'fato_diario',
-  nome: 'Visita Diária',
-  descricao:
-    'Alimenta a tela de Análise Diária. Cada carga guarda um snapshot por setor carimbado com a data de hoje (mantém o histórico do ciclo). A tela mostra o snapshot mais recente; recarregar o mesmo dia corrige aquele dia.',
-  tipo: 'snapshot',
-  grupo: 'Diária',
-  implementado: true,
-  colunas: [
-    { campo: 'cod_setor',          label: 'Código do Setor',   tipo: 'inteiro', obrigatoria: true,  aliases: ['cod_setor', 'codigo_setor', 'codigo_do_setor', 'setor', 'codigo', 'cod'] },
-    { campo: 'dias_trabalhados',   label: 'Dias Trabalhados',  tipo: 'decimal', obrigatoria: true,  aliases: ['dias_trabalhados', 'dias_trab', 'dias_uteis_trabalhados', 'dt'] },
-    { campo: 'dias_abonados',      label: 'Dias Abonados',     tipo: 'decimal', obrigatoria: true,  aliases: ['dias_abonados', 'dias_abono', 'dias_abon', 'abonos', 'da'] },
-    { campo: 'visitas_realizadas', label: 'Visitas Realizadas',tipo: 'inteiro', obrigatoria: true,  aliases: ['visitas_realizadas', 'visitas', 'visitas_real', 'vr'] },
-    { campo: 'painel',             label: 'Painel',            tipo: 'inteiro', obrigatoria: false, aliases: ['painel', 'tamanho_painel', 'medicos_painel', 'medicos'] },
-  ],
-};
-
 // --- Grupo "Ciclo": cargas que acrescentam as linhas de um ciclo novo --------
 
 export const CARGA_METAS_CICLO: CargaSpec = {
@@ -82,7 +65,7 @@ export const CARGA_METAS_CICLO: CargaSpec = {
     { campo: 'ciclo',            label: 'Ciclo',           tipo: 'texto',   obrigatoria: true,  aliases: ['ciclo'] },
     { campo: 'dias_trabalhados', label: 'Dias Trabalhados',tipo: 'decimal', obrigatoria: true,  aliases: ['dias_trabalhados', 'dias_trab', 'dt'] },
     { campo: 'tamanho_painel',   label: 'Tamanho do Painel',tipo: 'inteiro', obrigatoria: true, aliases: ['tamanho_painel', 'painel', 'medicos'] },
-    { campo: 'considerar',       label: 'Considerar',      tipo: 'texto',   obrigatoria: false, aliases: ['considerar', 'ativo'] },
+    { campo: 'considerar',       label: 'Considerar',      tipo: 'texto',   obrigatoria: true, aliases: ['considerar', 'ativo'] },
   ],
 };
 
@@ -130,13 +113,13 @@ export const CARGA_DIM_MEDICOS: CargaSpec = {
   implementado: false,
   colunas: [
     { campo: 'crmuf',         label: 'CRM/UF',        tipo: 'texto',   obrigatoria: true,  aliases: ['crmuf', 'crm_uf', 'crm'] },
-    { campo: 'nome_medico',   label: 'Nome',          tipo: 'texto',   obrigatoria: false, aliases: ['nome_medico', 'nome', 'medico'] },
-    { campo: 'classificacao', label: 'Classificação', tipo: 'texto',   obrigatoria: false, aliases: ['classificacao', 'classe'] },
-    { campo: 'cod_setor',     label: 'Código do Setor',tipo: 'inteiro',obrigatoria: false, aliases: ['cod_setor', 'setor'] },
-    { campo: 'status',        label: 'Ativo',         tipo: 'texto',   obrigatoria: false, aliases: ['status', 'ativo'] },
-    { campo: 'score',         label: 'Score',         tipo: 'decimal', obrigatoria: false, aliases: ['score'] },
-    { campo: 'especialidade', label: 'Especialidade', tipo: 'texto',   obrigatoria: false, aliases: ['especialidade'] },
-    { campo: 'potencial',     label: 'Potencial',     tipo: 'inteiro', obrigatoria: false, aliases: ['potencial'] },
+    { campo: 'nome_medico',   label: 'Nome',          tipo: 'texto',   obrigatoria: true, aliases: ['nome_medico', 'nome', 'medico'] },
+    { campo: 'classificacao', label: 'Classificação', tipo: 'texto',   obrigatoria: true, aliases: ['classificacao', 'classe'] },
+    { campo: 'cod_setor',     label: 'Código do Setor',tipo: 'inteiro',obrigatoria: true, aliases: ['cod_setor', 'setor'] },
+    { campo: 'status',        label: 'Ativo',         tipo: 'texto',   obrigatoria: true, aliases: ['status', 'ativo'] },
+    { campo: 'score',         label: 'Score',         tipo: 'decimal', obrigatoria: true, aliases: ['score'] },
+    { campo: 'especialidade', label: 'Especialidade', tipo: 'texto',   obrigatoria: true, aliases: ['especialidade'] },
+    { campo: 'potencial',     label: 'Potencial',     tipo: 'inteiro', obrigatoria: true, aliases: ['potencial'] },
   ],
 };
 
@@ -150,11 +133,11 @@ export const CARGA_DIM_HIERARQUIA: CargaSpec = {
   implementado: false,
   colunas: [
     { campo: 'cod_setor',     label: 'Código do Setor', tipo: 'inteiro', obrigatoria: true,  aliases: ['cod_setor', 'setor'] },
-    { campo: 'nome_setor',    label: 'Nome do Setor',   tipo: 'texto',   obrigatoria: false, aliases: ['nome_setor'] },
-    { campo: 'nome_rep',      label: 'Representante',   tipo: 'texto',   obrigatoria: false, aliases: ['nome_rep', 'rep', 'representante'] },
-    { campo: 'cod_distrito',  label: 'Código Distrito', tipo: 'inteiro', obrigatoria: false, aliases: ['cod_distrito', 'distrito_cod'] },
-    { campo: 'nome_distrito', label: 'Nome Distrito',   tipo: 'texto',   obrigatoria: false, aliases: ['nome_distrito', 'distrito'] },
-    { campo: 'nome_gd',       label: 'Gerente Distrital',tipo: 'texto',  obrigatoria: false, aliases: ['nome_gd', 'gd', 'gerente'] },
+    { campo: 'nome_setor',    label: 'Nome do Setor',   tipo: 'texto',   obrigatoria: true, aliases: ['nome_setor'] },
+    { campo: 'nome_rep',      label: 'Representante',   tipo: 'texto',   obrigatoria: true, aliases: ['nome_rep', 'rep', 'representante'] },
+    { campo: 'cod_distrito',  label: 'Código Distrito', tipo: 'inteiro', obrigatoria: true, aliases: ['cod_distrito', 'distrito_cod'] },
+    { campo: 'nome_distrito', label: 'Nome Distrito',   tipo: 'texto',   obrigatoria: true, aliases: ['nome_distrito', 'distrito'] },
+    { campo: 'nome_gd',       label: 'Gerente Distrital',tipo: 'texto',  obrigatoria: true, aliases: ['nome_gd', 'gd', 'gerente'] },
   ],
 };
 
@@ -168,8 +151,8 @@ export const CARGA_DIM_PRODUTOS: CargaSpec = {
   implementado: false,
   colunas: [
     { campo: 'id_produto',   label: 'ID do Produto', tipo: 'inteiro', obrigatoria: true,  aliases: ['id_produto', 'produto_id', 'cod_produto'] },
-    { campo: 'nome_produto', label: 'Nome',          tipo: 'texto',   obrigatoria: false, aliases: ['nome_produto', 'produto', 'nome'] },
-    { campo: 'id_marca',     label: 'ID da Marca',   tipo: 'inteiro', obrigatoria: false, aliases: ['id_marca', 'marca', 'cod_marca'] },
+    { campo: 'nome_produto', label: 'Nome',          tipo: 'texto',   obrigatoria: true, aliases: ['nome_produto', 'produto', 'nome'] },
+    { campo: 'id_marca',     label: 'ID da Marca',   tipo: 'inteiro', obrigatoria: true, aliases: ['id_marca', 'marca', 'cod_marca'] },
   ],
 };
 
@@ -188,10 +171,9 @@ export const CARGA_FATO_SEGMENTACAO: CargaSpec = {
   ],
 };
 
-// Cargas disponíveis no hub. Só a Diária está ligada (implementado:true);
-// as demais mostram só o layout até a Fase 2/3.
+// Cargas disponíveis no hub. Nenhuma gravando ainda (implementado:false) até a
+// Fase 2/3 religar os commits — os cards mostram só o layout.
 export const CARGAS: CargaSpec[] = [
-  CARGA_FATO_DIARIO,
   CARGA_METAS_CICLO,
   CARGA_FATO_VISITAS,
   CARGA_FATO_AMOSTRAS,
@@ -202,7 +184,7 @@ export const CARGAS: CargaSpec[] = [
 ];
 
 // Ordem das seções no hub.
-export const GRUPOS_ORDEM = ['Diária', 'Ciclo', 'Cadastros'];
+export const GRUPOS_ORDEM = ['Ciclo', 'Cadastros'];
 
 export function getCarga(id: string): CargaSpec | undefined {
   return CARGAS.find((c) => c.id === id);
@@ -289,9 +271,16 @@ export function parseLinhas(raw: Record<string, unknown>[], spec: CargaSpec): Pa
         obj[col.campo] = val;
       }
     }
-    if (obj.cod_setor == null || !(obj.cod_setor > 0)) {
+    // Todas as colunas são obrigatórias: nenhuma pode ficar vazia na linha.
+    for (const col of spec.colunas) {
+      if (col.obrigatoria && obj[col.campo] == null) {
+        rowErro = true;
+        if (erros.length < 10) erros.push(`Linha ${i + 2}: "${col.label}" vazio (obrigatório).`);
+      }
+    }
+    if (obj.cod_setor != null && !(obj.cod_setor > 0)) {
       rowErro = true;
-      if (erros.length < 10) erros.push(`Linha ${i + 2}: código de setor ausente ou inválido.`);
+      if (erros.length < 10) erros.push(`Linha ${i + 2}: código de setor inválido.`);
     }
     if (rowErro) linhasComErro++;
     else rows.push(obj);

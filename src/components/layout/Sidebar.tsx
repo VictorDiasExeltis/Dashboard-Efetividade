@@ -24,7 +24,7 @@ const navItems = [
   { name: 'Visitação x Segmentação', path: '/visitacao-x-segmentacao', icon: PieChart },
   { name: 'Entrega de Amostras', path: '/alocacao-de-recursos', icon: BarChart3 },
   { name: 'Médicos não Visitados', path: '/target-list', icon: Target },
-  { name: 'Análise Diária', path: '/analise-diaria', icon: CalendarCheck },
+  { name: 'Análise de Ciclo', path: '/analise-diaria', icon: CalendarCheck },
   { name: 'Insights', path: '/insights', icon: Lightbulb },
 ];
 

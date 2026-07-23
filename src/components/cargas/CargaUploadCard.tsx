@@ -11,6 +11,7 @@ import {
   X,
   Database,
   Clock,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Card, CardContent } from '@/src/components/ui/card';
@@ -21,7 +22,8 @@ import {
   type CargaSpec,
   type ParseResult,
 } from '@/src/lib/cargas/config';
-import { commitFatoDiario, type CargaStatus } from '@/src/app/actions/cargas';
+import { baixarModeloCarga } from '@/src/lib/cargas/modelo';
+import { type CargaStatus } from '@/src/app/actions/cargas';
 
 interface Props {
   spec: CargaSpec;
@@ -85,13 +87,8 @@ export function CargaUploadCard({ spec, status, onDone }: Props) {
     setCommitting(true);
     setResultado(null);
     try {
-      // Fase 1: só a carga diária. Fase 2/3 adicionam novos ramos aqui.
-      let res;
-      if (spec.id === 'fato_diario') {
-        res = await commitFatoDiario(parse.rows, arquivoNome ?? undefined);
-      } else {
-        res = { ok: false, linhas: 0, mensagem: 'Carga ainda não implementada.' };
-      }
+      // Nenhuma carga gravando ainda — Fase 2/3 adicionam os ramos de commit aqui.
+      const res = { ok: false, linhas: 0, mensagem: 'Carga ainda não implementada.' };
       setResultado({ ok: res.ok, msg: res.mensagem });
       if (res.ok) {
         setParse(null);
@@ -131,19 +128,26 @@ export function CargaUploadCard({ spec, status, onDone }: Props) {
 
         {/* Colunas esperadas */}
         <div className="mb-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Colunas esperadas no arquivo</p>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Colunas esperadas no arquivo</p>
+            <button
+              type="button"
+              onClick={() => baixarModeloCarga(spec)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors shrink-0"
+              title="Baixar um Excel modelo com o formato esperado desta carga"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Baixar modelo
+            </button>
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {spec.colunas.map((c) => (
               <span
                 key={c.campo}
-                className={cn(
-                  'text-[11px] px-2 py-1 rounded-md border',
-                  c.obrigatoria ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-white border-dashed border-slate-200 text-slate-400',
-                )}
-                title={`${c.label} · ${c.tipo}${c.obrigatoria ? ' · obrigatória' : ' · opcional'}`}
+                className="text-[11px] px-2 py-1 rounded-md border bg-slate-50 border-slate-200 text-slate-600"
+                title={`${c.label} · ${c.tipo}`}
               >
                 <span className="font-mono">{c.campo}</span>
-                {!c.obrigatoria && <span className="ml-1 italic">(opcional)</span>}
               </span>
             ))}
           </div>

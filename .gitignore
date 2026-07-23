@@ -13,3 +13,6 @@ coverage/
 # clerk configuration (can include secrets)
 /.clerk/
 
+# arquivos de carga (contêm dados de médicos — PII, não versionar)
+*.csv
+

@@ -2,8 +2,8 @@ import 'server-only';
 import { unstable_cache } from 'next/cache';
 
 // Envolve um loader de dados em unstable_cache. Os dados do dashboard só mudam
-// na carga de ciclo (e fato_diario na carga diária), então cachear corta as
-// re-execuções de queries pesadas e reduz Disk IO.
+// na carga de ciclo, então cachear corta as re-execuções de queries pesadas e
+// reduz Disk IO.
 //
 // IMPORTANTE: o loader NÃO pode depender de estado da requisição (cookies/
 // headers). A checagem de auth (requireUser) fica sempre na server action que

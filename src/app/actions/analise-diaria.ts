@@ -13,7 +13,7 @@ export interface SetorHierarquia {
 }
 
 // Lista TODOS os setores de dim_hierarquia (fonte única de território/rep).
-// Usado hoje só para popular a tela de Análise Diária com a lista real de
+// Usado hoje só para popular a tela de Análise de Ciclo com a lista real de
 // setores; as métricas de visitação ainda são mock até a base diária subir.
 export async function getSetoresHierarquia(): Promise<SetorHierarquia[]> {
   await requireUser();
@@ -46,19 +46,25 @@ const _getSetoresHierarquiaCached = cacheLoader(
 );
 
 // ---------------------------------------------------------------------------
-// Análise diária por setor — cruza fato_diario com o ciclo atual (dim_calendario),
-// o painel (metas_ciclo) e a hierarquia (dim_hierarquia). Todo o cálculo de
-// projeção é feito aqui no servidor. Divisões por zero → null (a tela mostra "—").
+// Análise de Ciclo por setor — reconstruída a partir do livro-razão de visitas
+// (fato_visitas), do painel/metas (metas_ciclo), do calendário (dim_calendario)
+// e da hierarquia (dim_hierarquia). Todo o cálculo é feito aqui no servidor.
+// Divisões por zero → null (a tela mostra "—").
 //
+// Ciclo exibido    = último ciclo com visitas em fato_visitas.
 // Modelo:
-//   DU             = dias úteis do ciclo atual
+//   DU             = dias úteis do ciclo (dim_calendario)
+//   dias_decorridos= dias úteis do ciclo <= hoje (ciclo já fechado ⇒ = DU)
+//   dias_restantes = max(DU − dias_decorridos, 0)
+//   visitas_real   = nº de visitas do setor no ciclo (COUNT fato_visitas)
+//   dias_trabalhados = nº de dias distintos com visita (COUNT DISTINCT data_visita)
+//   dias_abonados  = 0 (não disponível no livro de visitas)
+//   tamanho_painel = metas_ciclo.tamanho_painel
 //   meta_pct       = 90% × (DU / 15)
 //   visitas_meta   = round(meta_pct × tamanho_painel)
-//   dias_decorridos= dias_trabalhados + dias_abonados
-//   dias_restantes = DU − dias_decorridos
-//   mdv_atual      = visitas_realizadas / dias_trabalhados        (null se dt=0)
-//   mdv_necessaria = max(visitas_meta − visitas_realizadas, 0)
-//                      / dias_restantes                           (null se restantes<=0)
+//   mdv_atual      = visitas_real / dias_trabalhados              (null se dt=0)
+//   mdv_necessaria = max(visitas_meta − visitas_real, 0) / dias_restantes (null se <=0)
+//   projecao_fim   = mdv_atual × dias_restantes + visitas_real
 // ---------------------------------------------------------------------------
 
 export type StatusProjecao = 'manter' | 'atencao' | 'acao' | 'na';
@@ -125,21 +131,18 @@ const _getCicloProgressoCached = cacheLoader(
   try {
     if (!db) return vazio;
     const result = await db.execute(sql`
-      WITH hoje AS (
-        SELECT ciclo, MAX(data) AS ref
-        FROM dim_calendario
-        WHERE data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date
-        GROUP BY ciclo
-        ORDER BY ref DESC
-        LIMIT 1
+      WITH alvo AS (
+        -- Ciclo exibido = último ciclo com visitas em fato_visitas (alinha com a tabela).
+        SELECT MAX(ciclo) AS ciclo FROM fato_visitas
       )
       SELECT
-        h.ciclo,
-        (SELECT COUNT(*) FROM dim_calendario WHERE ciclo = h.ciclo)::int AS dias_uteis,
+        a.ciclo,
+        (SELECT COUNT(*) FROM dim_calendario WHERE ciclo = a.ciclo)::int AS dias_uteis,
         (SELECT COUNT(*) FROM dim_calendario
-          WHERE ciclo = h.ciclo
+          WHERE ciclo = a.ciclo
             AND data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date)::int AS dia_atual
-      FROM hoje h
+      FROM alvo a
+      WHERE a.ciclo IS NOT NULL
     `);
     const r = result[0] as any;
     if (!r) return vazio;
@@ -170,47 +173,54 @@ const _getAnaliseDiariaCached = cacheLoader(
   try {
     if (!db) return [];
     const result = await db.execute(sql`
-      WITH ciclo_atual AS (
-        -- Ciclo do último dia útil <= hoje (funciona em fim de semana/feriado).
-        SELECT ciclo
-        FROM dim_calendario
-        WHERE data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date
-        ORDER BY data DESC
-        LIMIT 1
+      WITH ciclo_alvo AS (
+        -- Ciclo exibido = último ciclo com visitas carregadas em fato_visitas.
+        SELECT MAX(ciclo) AS ciclo FROM fato_visitas
       ),
-      du AS (
-        SELECT COUNT(*)::int AS dias_uteis
+      cal AS (
+        -- Dias úteis do ciclo e quantos já decorreram até hoje (calendário).
+        SELECT
+          COUNT(*)::int AS dias_uteis,
+          COUNT(*) FILTER (
+            WHERE data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date
+          )::int AS dias_decorridos
         FROM dim_calendario
-        WHERE ciclo = (SELECT ciclo FROM ciclo_atual)
+        WHERE ciclo = (SELECT ciclo FROM ciclo_alvo)
       ),
-      diario AS (
-        -- Snapshot mais recente de cada setor DENTRO do ciclo atual.
-        SELECT DISTINCT ON (cod_setor)
-          cod_setor, dias_trabalhados, dias_abonados, visitas_realizadas, painel
-        FROM fato_diario
-        WHERE ciclo = (SELECT ciclo FROM ciclo_atual)
-        ORDER BY cod_setor, data DESC
+      visitas AS (
+        -- Livro-razão do ciclo: contagem de visitas e dias distintos com visita.
+        SELECT
+          cod_setor,
+          COUNT(*)::int                    AS visitas_realizadas,
+          COUNT(DISTINCT data_visita)::int AS dias_trabalhados
+        FROM fato_visitas
+        WHERE ciclo = (SELECT ciclo FROM ciclo_alvo)
+        GROUP BY cod_setor
       )
       SELECT
-        fd.cod_setor,
+        v.cod_setor,
         dh.nome_setor,
         dh.nome_distrito,
         dh.nome_rep,
-        fd.dias_trabalhados,
-        fd.dias_abonados,
-        fd.visitas_realizadas,
-        fd.painel                       AS tamanho_painel,
-        (SELECT ciclo FROM ciclo_atual) AS ciclo,
-        (SELECT dias_uteis FROM du)     AS dias_uteis
-      FROM diario fd
-      JOIN dim_hierarquia dh ON dh.cod_setor = fd.cod_setor
+        v.visitas_realizadas,
+        v.dias_trabalhados,
+        mc.tamanho_painel               AS tamanho_painel,
+        (SELECT ciclo FROM ciclo_alvo)  AS ciclo,
+        cal.dias_uteis,
+        cal.dias_decorridos
+      FROM visitas v
+      JOIN dim_hierarquia dh ON dh.cod_setor = v.cod_setor
+      LEFT JOIN metas_ciclo mc
+        ON mc.cod_setor = v.cod_setor
+       AND mc.ciclo = (SELECT ciclo FROM ciclo_alvo)
+      CROSS JOIN cal
       ORDER BY dh.nome_distrito, dh.nome_setor
     `);
 
     return result.map((r: any) => {
       const dias_uteis         = Number(r.dias_uteis) || 0;
       const dias_trabalhados   = Number(r.dias_trabalhados) || 0;
-      const dias_abonados      = Number(r.dias_abonados) || 0;
+      const dias_abonados      = 0; // livro de visitas não tem abono
       const visitas_realizadas = Number(r.visitas_realizadas) || 0;
       const painel_raw         = r.tamanho_painel == null ? null : Number(r.tamanho_painel);
       // Ajuste interno: painel acima de 190 é travado em 180 para o cálculo.
@@ -224,8 +234,10 @@ const _getAnaliseDiariaCached = cacheLoader(
         ? visitas_realizadas / tamanho_painel
         : null;
 
-      const dias_decorridos = dias_trabalhados + dias_abonados;
-      const dias_restantes  = dias_uteis - dias_decorridos;
+      // Decorridos/restantes vêm do calendário (não das visitas): ciclo fechado
+      // ⇒ decorridos = DU ⇒ restantes = 0 ⇒ projeção = realizado.
+      const dias_decorridos = Number(r.dias_decorridos) || 0;
+      const dias_restantes  = Math.max(dias_uteis - dias_decorridos, 0);
 
       const visitas_faltantes = visitas_meta != null ? visitas_meta - visitas_realizadas : null;
       const mdv_atual = dias_trabalhados > 0 ? visitas_realizadas / dias_trabalhados : null;
@@ -265,6 +277,6 @@ const _getAnaliseDiariaCached = cacheLoader(
     return [];
   }
   },
-  // fato_diario muda na carga diária — TTL curto (5min) pra manter fresco.
+  // fato_visitas muda na carga do ciclo — TTL curto (5min) pra manter fresco.
   300,
 );

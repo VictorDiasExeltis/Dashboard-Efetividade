@@ -149,7 +149,7 @@ export type LineChartCardConfig = {
 
 export function LineChartCard({ config }: { config: LineChartCardConfig }) {
   const searchParams = useSearchParams();
-  const [showLabels, setShowLabels] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
   const [dados, setDados] = useState<DadosGrafico[]>([]);
   const [series, setSeries] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
