@@ -6,8 +6,8 @@
 // public/relatorio-colega/. Trocar depois pela integração de verdade.
 // Para ajustar o relatório externo, mude só as 3 constantes abaixo.
 const REL_EXTERNO = {
-  nome: 'Relatório da Equipe',                 // TODO: nome real do relatório da colega
-  descricao: 'Relatórios em Excel — visão complementar.',
+  nome: 'Relatório de Demanda e Prescrição',
+  descricao: 'Ações médicas, crescimento de demanda, ranking e análise de tendência.',
   url: '/relatorio-colega/index.html',         // arquivos ficam em public/relatorio-colega/
 };
 
