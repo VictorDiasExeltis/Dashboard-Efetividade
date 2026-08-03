@@ -18,6 +18,7 @@ import { Card, CardContent } from '@/src/components/ui/card';
 import { DashboardFilters } from './DashboardFilters';
 import { GraficoCobertura } from './GraficoCobertura';
 import { GraficoMDV } from './GraficoMDV';
+import { CoberturaMdvScatter } from './CoberturaMdvScatter';
 import { GraficoAbonos } from './GraficoAbonos';
 import { TabelaRepresentantes } from './TabelaRepresentantes';
 import { useLayout } from '@/src/context/LayoutContext';
@@ -232,6 +233,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       <div className="grid grid-cols-1 gap-8">
         <GraficoCobertura />
         <GraficoMDV />
+        <CoberturaMdvScatter distrito={filtroDistrito} />
 
         {/* ─── Análise de Abonos por Ciclo ────────────────────────
             Donut e tabela compartilham o mesmo filtro de ciclo.

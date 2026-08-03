@@ -19,6 +19,10 @@ import { Input } from '@/src/components/ui/input';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
 import { podeCarregar } from '@/src/lib/cargas/config';
 
+// Liga/desliga o link da Central de Cargas no menu. false = oculto (a rota
+// continua existindo por URL; a trava de escrita segue nas server actions).
+const MOSTRAR_CENTRAL_CARGAS = false;
+
 const navItems = [
   { name: 'Cobertura e MDV', path: '/visao-executiva', icon: LayoutDashboard },
   { name: 'Visitação x Segmentação', path: '/visitacao-x-segmentacao', icon: PieChart },
@@ -144,9 +148,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             );
           })}
 
-          {/* Central de Cargas — visível só para usuários autorizados. A trava
-              real está nas server actions; aqui é só UX (esconder o link). */}
-          {podeCarregar(email) && (
+          {/* Central de Cargas — OCULTA temporariamente (a pedido). Para reexibir,
+              troque `MOSTRAR_CENTRAL_CARGAS` para true no topo deste arquivo.
+              A rota /central-de-cargas continua existindo; isto só esconde o link.
+              A trava real de escrita segue nas server actions (podeCarregar). */}
+          {MOSTRAR_CENTRAL_CARGAS && podeCarregar(email) && (
             <Link
               href="/central-de-cargas"
               onClick={onClose}

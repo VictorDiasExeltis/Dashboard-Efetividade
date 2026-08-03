@@ -19,7 +19,7 @@ export default function LoginPage() {
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.push("/visao-executiva");
+        router.push("/hub");
       } else if (!hasHashToken) {
         // Só removemos o loading (exibindo o form) se não tiver token pra processar.
         // Se tiver, mantemos o loading enquanto o Supabase faz o login em background.
@@ -33,7 +33,7 @@ export default function LoginPage() {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_IN" && session) {
-          router.push("/visao-executiva");
+          router.push("/hub");
         }
       }
     );

@@ -11,7 +11,7 @@ export default function Home() {
     // Redireciona conforme a sessão: dashboard se logado, login caso contrário.
     const supabase = getSupabaseClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      router.replace(session ? "/visao-executiva" : "/login");
+      router.replace(session ? "/hub" : "/login");
     });
   }, [router]);
 

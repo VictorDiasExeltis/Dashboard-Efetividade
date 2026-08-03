@@ -40,7 +40,7 @@ DECLARE
 BEGIN
     -- 1. Ultimo ciclo do banco (sempre, pra metadata)
     SELECT ciclo INTO v_last_ciclo
-    FROM (SELECT DISTINCT ciclo FROM public.fato_visitas ORDER BY ciclo DESC LIMIT 1) s;
+    FROM (SELECT DISTINCT ciclo FROM public.fato_visitas_fechado ORDER BY ciclo DESC LIMIT 1) s;
 
     -- 2. Janela selecionada e janela de comparacao (trend). p_ciclos chega
     -- como CSV ("202604,202605") ou NULL/vazio.
@@ -48,7 +48,7 @@ BEGIN
         -- Sem filtro: KPIs reportam apenas o ultimo ciclo
         v_ciclos_sel := ARRAY[v_last_ciclo];
         SELECT ciclo INTO v_prev_ciclo
-        FROM (SELECT DISTINCT ciclo FROM public.fato_visitas ORDER BY ciclo DESC LIMIT 1 OFFSET 1) s;
+        FROM (SELECT DISTINCT ciclo FROM public.fato_visitas_fechado ORDER BY ciclo DESC LIMIT 1 OFFSET 1) s;
     ELSE
         SELECT array_agg(btrim(c)) INTO v_ciclos_sel
         FROM unnest(string_to_array(p_ciclos, ',')) c
@@ -56,7 +56,7 @@ BEGIN
         -- Trend vs ciclo imediatamente anterior ao MIN(selecao)
         SELECT ciclo INTO v_prev_ciclo
         FROM (
-            SELECT DISTINCT ciclo FROM public.fato_visitas
+            SELECT DISTINCT ciclo FROM public.fato_visitas_fechado
             WHERE ciclo < (SELECT MIN(c) FROM unnest(v_ciclos_sel) c)
             ORDER BY ciclo DESC LIMIT 1
         ) s;
@@ -78,7 +78,7 @@ BEGIN
     -- v_ciclos_prev (para trend).
     WITH visitas_ag AS (
         SELECT ciclo, cod_setor, COUNT(DISTINCT crmuf) as vits_uniq, COUNT(*) as vits_total
-        FROM public.fato_visitas
+        FROM public.fato_visitas_fechado
         WHERE cod_setor = ANY(v_context_setores)
         GROUP BY ciclo, cod_setor
     ),
@@ -105,7 +105,7 @@ BEGIN
     -- continuar coerente com o KPI do contexto.
     WITH visitas_br AS (
         SELECT ciclo, cod_setor, COUNT(DISTINCT crmuf) as vits_uniq, COUNT(*) as vits_total
-        FROM public.fato_visitas GROUP BY ciclo, cod_setor
+        FROM public.fato_visitas_fechado GROUP BY ciclo, cod_setor
     ),
     metas_br AS (
         SELECT ciclo, cod_setor, SUM(tamanho_painel) as pnl, SUM(COALESCE(dias_trabalhados, 20)) as dias
@@ -126,13 +126,13 @@ BEGIN
     -- contatos), evitando contatos > visitas.
     SELECT COUNT(DISTINCT crmuf), COUNT(*)
     INTO v_contatos_unicos, v_visitas_totais
-    FROM public.fato_visitas
+    FROM public.fato_visitas_fechado
     WHERE cod_setor = ANY(v_context_setores)
       AND ciclo = ANY(v_ciclos_sel);
 
     SELECT COUNT(DISTINCT crmuf), COUNT(*)
     INTO v_contatos_unicos_prev, v_visitas_totais_prev
-    FROM public.fato_visitas
+    FROM public.fato_visitas_fechado
     WHERE cod_setor = ANY(v_context_setores)
       AND ciclo = ANY(v_ciclos_prev);
 

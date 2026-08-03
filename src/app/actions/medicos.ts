@@ -10,23 +10,32 @@ import type { MedicoNaoVisitado } from './medicos.types';
 // A query é pesada (~1-3s: anti-join checa "sem visita em 3 ciclos" por médico)
 // e os dados só mudam na carga de ciclo. Cacheia por território; revalida em
 // 30min. requireUser fica FORA do cache (auth precisa rodar sempre).
+// soFechado=true → usa só ciclos fechados (tela de Insights). Default false →
+// inclui o ciclo aberto/parcial (tela Target List, visão operacional ao vivo).
 export async function getMedicosNaoVisitados(
   distrito: string = 'Todos',
-  setor:    string = 'Todos'
+  setor:    string = 'Todos',
+  soFechado: boolean = false,
 ): Promise<MedicoNaoVisitado[]> {
   await requireUser();
-  return fetchMedicosNaoVisitadosCached(distrito, setor);
+  return fetchMedicosNaoVisitadosCached(distrito, setor, soFechado);
 }
 
 const fetchMedicosNaoVisitadosCached = unstable_cache(
-  async (distrito: string, setor: string): Promise<MedicoNaoVisitado[]> => {
+  async (distrito: string, setor: string, soFechado: boolean): Promise<MedicoNaoVisitado[]> => {
   try {
     if (!db) return [];
+
+    // Fonte de visitas e janela dos "3 ciclos recentes" conforme o modo.
+    const fv = soFechado ? sql`fato_visitas_fechado` : sql`fato_visitas`;
+    const ciclos3 = soFechado
+      ? sql`SELECT ciclo FROM ciclos_fechados ORDER BY ciclo DESC LIMIT 3`
+      : sql`SELECT DISTINCT ciclo FROM metas_ciclo ORDER BY ciclo DESC LIMIT 3`;
 
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')
       ? sql`AND EXISTS (
           SELECT 1
-          FROM fato_visitas v2
+          FROM ${fv} v2
           INNER JOIN dim_hierarquia h ON h.cod_setor = v2.cod_setor
           WHERE v2.crmuf = m.crmuf
             ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
@@ -56,21 +65,15 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
       WHERE m.status = TRUE
         -- Sem visita nos 3 ciclos mais recentes (janela de "abandono")
         AND NOT EXISTS (
-          SELECT 1 FROM fato_visitas v
+          SELECT 1 FROM ${fv} v
           WHERE v.crmuf = m.crmuf
-            AND v.ciclo IN (
-              SELECT DISTINCT ciclo FROM metas_ciclo
-              ORDER BY ciclo DESC LIMIT 3
-            )
+            AND v.ciclo IN (${ciclos3})
         )
         -- Não incluídos nos últimos 3 ciclos
         AND (m.data_inclusao IS NULL OR m.data_inclusao < (
           SELECT MIN(c.data)
           FROM public.dim_calendario c
-          WHERE c.ciclo IN (
-            SELECT DISTINCT mc.ciclo FROM metas_ciclo mc
-            ORDER BY mc.ciclo DESC LIMIT 3
-          )
+          WHERE c.ciclo IN (${ciclos3})
         ))
         ${territorioExists}
       GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score, m.potencial, h_med.nome_setor, h_med.nome_distrito

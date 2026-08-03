@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Exeltis · Relatório da Equipe</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; }
+    body { display: flex; flex-direction: column; }
+    .topbar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand img { height: 26px; width: auto; object-fit: contain; }
+    .back { font-size: 13px; color: #64748b; text-decoration: none; padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 8px; white-space: nowrap; }
+    .back:hover { color: #0f172a; background: #f1f5f9; }
+    .tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+    .tab { border: 1px solid transparent; background: transparent; color: #64748b; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: all .15s; }
+    .tab:hover { background: #f1f5f9; color: #0f172a; }
+    .tab.active { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .frame-wrap { flex: 1; min-height: 0; }
+    iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+  </style>
+</head>
+<body>
+  <!-- ─── TELAS ───────────────────────────────────────────────────────────────
+       Para adicionar uma tela: solte o HTML nesta pasta e acrescente uma linha
+       em TELAS abaixo: { label: 'Nome da aba', file: 'arquivo.html' }
+       A ordem aqui = ordem das abas. A primeira abre por padrão.
+  ──────────────────────────────────────────────────────────────────────────── -->
+  <div class="topbar">
+    <div class="brand"><img src="/logo_exeltis.png" alt="Exeltis" /></div>
+    <div class="tabs" id="tabs"></div>
+    <a class="back" href="/hub">← Voltar à central</a>
+  </div>
+  <div class="frame-wrap"><iframe id="frame" title="Relatório"></iframe></div>
+
+  <script>
+    const TELAS = [
+      { label: 'Ações Médicas',          file: 'tela-1.html' },
+      { label: 'Crescimento de Demanda', file: 'tela-2.html' },
+      { label: 'Ranking',                file: 'tela-3.html' },
+      { label: 'Análise de Tendência',   file: 'tela-4.html' },
+    ];
+
+    const tabsEl = document.getElementById('tabs');
+    const frameEl = document.getElementById('frame');
+
+    function ativar(i) {
+      frameEl.src = TELAS[i].file;
+      [...tabsEl.children].forEach((b, j) => b.classList.toggle('active', j === i));
+    }
+
+    TELAS.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.className = 'tab';
+      b.textContent = t.label;
+      b.onclick = () => ativar(i);
+      tabsEl.appendChild(b);
+    });
+
+    if (TELAS.length) ativar(0);
+  </script>
+</body>
+</html>

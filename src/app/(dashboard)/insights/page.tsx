@@ -2,24 +2,16 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import {
-  TrendingDown,
-  TrendingUp,
-  ArrowDownRight,
-  CalendarOff,
-  UserX,
-  FlaskConical,
-  Layers,
-} from 'lucide-react';
+import { TrendingDown, TrendingUp, UserX, Target, Gauge, Activity } from 'lucide-react';
 import { Card, CardContent } from '@/src/components/ui/card';
 import { useLayout } from '@/src/context/LayoutContext';
 import { InsightsFilters } from '@/src/components/dashboard/InsightsFilters';
-import { getAnaliseDiaria, type AnaliseDiariaRow } from '@/src/app/actions/analise-diaria';
-import { getInsightsExtras } from '@/src/app/actions/insights';
+import { VisitacaoEntregaCard } from '@/src/components/dashboard/VisitacaoEntregaCard';
+import { getDesempenhoVisitacao, type SetorDesempenho } from '@/src/app/actions/insights';
 import { getMedicosNaoVisitados } from '@/src/app/actions/medicos';
 import type { MedicoNaoVisitado } from '@/src/app/actions/medicos.types';
 
-const TOP_N = 3;
+const TOP_DESEMP = 5;   // itens por lista no card Desempenho de Visitação
 
 // Abrevia nomes do meio: "ANA PAULA DA SILVA" → "Ana P. Silva".
 const CONECTORES = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
@@ -32,73 +24,102 @@ function abreviarNome(nome: string | null): string {
   return [cap(p[0]), ...meio, cap(p[p.length - 1])].join(' ');
 }
 
-// Linha de setor com tudo que os insights precisam.
-interface Setor {
-  cod_setor: number;
-  nome_setor: string;
-  nome_distrito: string;
-  nome_rep: string | null;
-  atingimento: number | null;   // projeção / meta
-  diasAbonados: number;
-  alta: number;                 // alta categoria não visitada
-  amostras: number;
-  semSeg: number;               // médicos visitados sem segmentação
-}
-
-interface Item { setor: string; rep: string; valor: string }
-interface InsightDef {
-  icon: React.ElementType;
-  accent: string;   // text color
-  bg: string;
-  title: string;
-  hint: string;
-  periodo?: string; // badge de ciclo (quando difere do atual)
-  items: Item[];
-}
-
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`);
-const dnum = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+const mdvFmt = (v: number | null) => (v == null ? '—' : v.toFixed(1));
 
-function InsightCard({ def, loading }: { def: InsightDef; loading: boolean }) {
-  const Icon = def.icon;
+// Uma linha de setor numa coluna de Desempenho de Visitação.
+interface DesempItem { setor: string; rep: string; valor: string; media: string }
+
+function DesempList({ title, icon: Icon, accent, items, loading, dir }: {
+  title: string; icon: React.ElementType; accent: string;
+  items: DesempItem[]; loading: boolean; dir: 'abaixo' | 'acima';
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className={`h-4 w-4 ${accent}`} />
+        <h4 className="text-xs font-semibold text-slate-700">{title}</h4>
+      </div>
+      {loading ? (
+        <div className="space-y-1.5">
+          {Array.from({ length: TOP_DESEMP }).map((_, i) => <div key={i} className="h-8 bg-slate-100 rounded-lg animate-pulse" />)}
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-[11px] text-slate-400 py-3 text-center">Nenhum setor {dir} da média.</p>
+      ) : (
+        <ol className="space-y-1">
+          {items.map((it, i) => (
+            <li key={i} className="flex items-center gap-2">
+              <span className="w-3.5 text-[11px] font-bold text-slate-400 tabular-nums">{i + 1}</span>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-slate-900 text-xs truncate">{it.setor}</div>
+                <div className="text-[10px] text-slate-500 truncate">{it.rep}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className={`font-semibold text-xs tabular-nums ${accent}`}>{it.valor}</div>
+                <div className="text-[10px] text-slate-400 tabular-nums">méd {it.media}</div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+interface DesempLists {
+  cobAbaixo: DesempItem[]; mdvAbaixo: DesempItem[];
+  cobAcima: DesempItem[]; mdvAcima: DesempItem[];
+}
+
+function DesempenhoVisitacaoCard({ lists, periodo, loading }: { lists: DesempLists; periodo?: string; loading: boolean }) {
   return (
     <Card className="border border-slate-200 shadow-sm bg-white">
       <CardContent className="p-5">
-        <div className="flex items-start gap-3 mb-4">
-          <div className={`p-2 rounded-lg ${def.bg} shrink-0`}><Icon className={`h-5 w-5 ${def.accent}`} /></div>
+        <div className="flex items-start gap-3 mb-5">
+          <div className="p-2 rounded-lg bg-indigo-50 shrink-0"><Activity className="h-5 w-5 text-indigo-600" /></div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-slate-800 text-sm">{def.title}</h3>
-              {def.periodo && (
-                <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">
-                  {def.periodo}
-                </span>
+              <h3 className="font-semibold text-slate-800 text-sm">Desempenho de Visitação</h3>
+              {periodo && (
+                <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">{periodo}</span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{def.hint}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Cobertura e MDV por setor vs. média do próprio distrito</p>
           </div>
         </div>
 
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: TOP_N }).map((_, i) => <div key={i} className="h-9 bg-slate-100 rounded-lg animate-pulse" />)}
+        <div className="space-y-6">
+          {/* Abaixo da média — Cobertura e MDV lado a lado */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold text-rose-600 uppercase tracking-wide">
+              <TrendingDown className="h-3.5 w-3.5" /> Abaixo da média
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:divide-x sm:divide-slate-200">
+              <div className="sm:pr-6">
+                <DesempList title="Cobertura" icon={Target} accent="text-rose-600" items={lists.cobAbaixo} loading={loading} dir="abaixo" />
+              </div>
+              <div className="sm:pl-6">
+                <DesempList title="MDV" icon={Gauge} accent="text-rose-600" items={lists.mdvAbaixo} loading={loading} dir="abaixo" />
+              </div>
+            </div>
           </div>
-        ) : def.items.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">Sem dados.</p>
-        ) : (
-          <ol className="space-y-1.5">
-            {def.items.map((it, i) => (
-              <li key={i} className="flex items-center gap-2 text-sm">
-                <span className="w-4 text-[11px] font-bold text-slate-400 tabular-nums">{i + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-slate-900 truncate">{it.setor}</div>
-                  <div className="text-[11px] text-slate-500 truncate">{it.rep}</div>
-                </div>
-                <span className={`font-semibold tabular-nums ${def.accent}`}>{it.valor}</span>
-              </li>
-            ))}
-          </ol>
-        )}
+
+          {/* Acima da média — Cobertura e MDV lado a lado */}
+          <div className="border-t border-slate-200 pt-6">
+            <div className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold text-emerald-600 uppercase tracking-wide">
+              <TrendingUp className="h-3.5 w-3.5" /> Acima da média
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:divide-x sm:divide-slate-200">
+              <div className="sm:pr-6">
+                <DesempList title="Cobertura" icon={Target} accent="text-emerald-600" items={lists.cobAcima} loading={loading} dir="acima" />
+              </div>
+              <div className="sm:pl-6">
+                <DesempList title="MDV" icon={Gauge} accent="text-emerald-600" items={lists.mdvAcima} loading={loading} dir="acima" />
+              </div>
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -107,12 +128,11 @@ function InsightCard({ def, loading }: { def: InsightDef; loading: boolean }) {
 export default function InsightsPage() {
   const { setHeaderState } = useLayout();
   const searchParams = useSearchParams();
-  const [loading, setLoading] = useState(true);
-  const [base, setBase] = useState<AnaliseDiariaRow[]>([]);
-  const [extras, setExtras] = useState<Record<number, { alta: number; amostras: number; semSeg: number }>>({});
-  const [cicloDetalhe, setCicloDetalhe] = useState<string | null>(null);
   const [altoPotencial, setAltoPotencial] = useState<MedicoNaoVisitado[]>([]);
   const [loadingMed, setLoadingMed] = useState(true);
+  const [desempRows, setDesempRows] = useState<SetorDesempenho[]>([]);
+  const [desempMeta, setDesempMeta] = useState<{ ano: string | null; ini: string | null; fim: string | null }>({ ano: null, ini: null, fim: null });
+  const [loadingDesemp, setLoadingDesemp] = useState(true);
 
   const distrito = searchParams.get('distrito') || 'Todos';
 
@@ -129,19 +149,17 @@ export default function InsightsPage() {
     return () => setHeaderState({});
   }, [setHeaderState]);
 
+  // Desempenho de Visitação — cobertura/MDV por setor no acumulado do ano (sem ciclo 1).
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    Promise.all([getAnaliseDiaria(), getInsightsExtras()])
-      .then(([b, ex]) => {
+    setLoadingDesemp(true);
+    getDesempenhoVisitacao()
+      .then((d) => {
         if (cancelled) return;
-        setBase(b);
-        const map: Record<number, { alta: number; amostras: number; semSeg: number }> = {};
-        ex.rows.forEach((r) => { map[r.cod_setor] = { alta: r.alta_cat_nao_visitada, amostras: r.amostras, semSeg: r.visitados_sem_seg }; });
-        setExtras(map);
-        setCicloDetalhe(ex.cicloDetalhe);
+        setDesempRows(d.rows);
+        setDesempMeta({ ano: d.ano, ini: d.cicloInicial, fim: d.cicloFinal });
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) setLoadingDesemp(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -151,7 +169,7 @@ export default function InsightsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoadingMed(true);
-    getMedicosNaoVisitados('Todos', 'Todos')
+    getMedicosNaoVisitados('Todos', 'Todos', true)
       .then((meds) => {
         if (cancelled) return;
         setAltoPotencial(
@@ -162,85 +180,44 @@ export default function InsightsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Junta base (fato_visitas) + extras (visita). Aplica filtro de distrito.
-  const setores = useMemo<Setor[]>(() => {
-    return base
-      .filter((r) => distrito === 'Todos' || r.nome_distrito === distrito)
-      .map((r) => {
-        const e = extras[r.cod_setor] ?? { alta: 0, amostras: 0, semSeg: 0 };
-        const atingimento = r.projecao_fim != null && r.visitas_meta ? r.projecao_fim / r.visitas_meta : null;
-        return {
-          cod_setor: r.cod_setor,
-          nome_setor: r.nome_setor,
-          nome_distrito: r.nome_distrito ?? '—',
-          nome_rep: r.nome_rep,
-          atingimento,
-          diasAbonados: Number(r.dias_abonados) || 0,
-          alta: e.alta,
-          amostras: e.amostras,
-          semSeg: e.semSeg,
-        };
-      });
-  }, [base, extras, distrito]);
+  // ── Desempenho de Visitação: 4 listas (top-5) vs. média do distrito ──
+  const desempLists = useMemo<DesempLists>(() => {
+    const rows = desempRows.filter((r) => distrito === 'Todos' || r.nome_distrito === distrito);
+    // Média simples dos setores dentro de cada distrito.
+    const meanBy = (sel: (r: SetorDesempenho) => number | null) => {
+      const acc = new Map<string, number[]>();
+      rows.forEach((r) => { const v = sel(r); if (v != null) { const a = acc.get(r.nome_distrito) ?? []; a.push(v); acc.set(r.nome_distrito, a); } });
+      const m = new Map<string, number>();
+      acc.forEach((arr, d) => m.set(d, arr.reduce((x, y) => x + y, 0) / arr.length));
+      return m;
+    };
+    const mCob = meanBy((r) => r.cobertura);
+    const mMdv = meanBy((r) => r.mdv);
+    const build = (
+      sel: (r: SetorDesempenho) => number | null,
+      mean: Map<string, number>,
+      dir: 'abaixo' | 'acima',
+      fmt: (v: number | null) => string,
+    ): DesempItem[] =>
+      rows
+        .map((r) => ({ r, v: sel(r), med: mean.get(r.nome_distrito) }))
+        .filter((x): x is { r: SetorDesempenho; v: number; med: number } => x.v != null && x.med != null)
+        .map((x) => ({ ...x, gap: x.v - x.med }))
+        .filter((x) => (dir === 'abaixo' ? x.gap < 0 : x.gap > 0))
+        .sort((a, b) => (dir === 'abaixo' ? a.gap - b.gap : b.gap - a.gap))
+        .slice(0, TOP_DESEMP)
+        .map((x) => ({ setor: x.r.nome_setor, rep: abreviarNome(x.r.nome_rep), valor: fmt(x.v), media: fmt(x.med) }));
+    return {
+      cobAbaixo: build((r) => r.cobertura, mCob, 'abaixo', pct),
+      cobAcima:  build((r) => r.cobertura, mCob, 'acima',  pct),
+      mdvAbaixo: build((r) => r.mdv, mMdv, 'abaixo', mdvFmt),
+      mdvAcima:  build((r) => r.mdv, mMdv, 'acima',  mdvFmt),
+    };
+  }, [desempRows, distrito]);
 
-  // Média de atingimento por distrito (para "abaixo da média do distrito").
-  const mediaDistrito = useMemo(() => {
-    const acc = new Map<string, number[]>();
-    setores.forEach((s) => { if (s.atingimento != null) { const a = acc.get(s.nome_distrito) ?? []; a.push(s.atingimento); acc.set(s.nome_distrito, a); } });
-    const m = new Map<string, number>();
-    acc.forEach((arr, d) => m.set(d, arr.reduce((x, y) => x + y, 0) / arr.length));
-    return m;
-  }, [setores]);
-
-  const mediaAmostras = useMemo(() => {
-    const v = setores.map((s) => s.amostras).filter((x) => x > 0);
-    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
-  }, [setores]);
-
-  const item = (s: Setor, valor: string): Item => ({ setor: s.nome_setor, rep: abreviarNome(s.nome_rep), valor });
-
-  const periodoDetalhe = cicloDetalhe ? `Ciclo ${cicloDetalhe.slice(-2)}` : undefined;
-
-  // ── Definição dos 7 cards ──────────────────────────────────
-  const cards = useMemo<InsightDef[]>(() => {
-    const comAting = setores.filter((s) => s.atingimento != null);
-
-    const piores = [...comAting].sort((a, b) => a.atingimento! - b.atingimento!).slice(0, TOP_N)
-      .map((s) => item(s, pct(s.atingimento)));
-
-    const melhores = [...comAting].sort((a, b) => b.atingimento! - a.atingimento!).slice(0, TOP_N)
-      .map((s) => item(s, pct(s.atingimento)));
-
-    const abaixoMedia = comAting
-      .map((s) => ({ s, gap: s.atingimento! - (mediaDistrito.get(s.nome_distrito) ?? 0) }))
-      .filter((x) => x.gap < 0)
-      .sort((a, b) => a.gap - b.gap)
-      .slice(0, TOP_N)
-      .map((x) => item(x.s, `${pct(x.s.atingimento)} · méd ${pct(mediaDistrito.get(x.s.nome_distrito) ?? null)}`));
-
-    const abonos = [...setores].filter((s) => s.diasAbonados > 0).sort((a, b) => b.diasAbonados - a.diasAbonados).slice(0, TOP_N)
-      .map((s) => item(s, `${dnum(s.diasAbonados)}d`));
-
-    const altaCat = [...setores].filter((s) => s.alta > 0).sort((a, b) => b.alta - a.alta).slice(0, TOP_N)
-      .map((s) => item(s, String(s.alta)));
-
-    const maisAmostras = [...setores].filter((s) => s.amostras > mediaAmostras && mediaAmostras > 0)
-      .sort((a, b) => b.amostras - a.amostras).slice(0, TOP_N)
-      .map((s) => item(s, dnum(s.amostras)));
-
-    const semSeg = [...setores].filter((s) => s.semSeg > 0).sort((a, b) => b.semSeg - a.semSeg).slice(0, TOP_N)
-      .map((s) => item(s, String(s.semSeg)));
-
-    return [
-      { icon: TrendingDown,  accent: 'text-rose-600',    bg: 'bg-rose-50',    title: 'Pior desempenho',                hint: 'Menor atingimento projetado (projeção/meta)', items: piores },
-      { icon: TrendingUp,    accent: 'text-emerald-600', bg: 'bg-emerald-50', title: 'Maior desempenho',               hint: 'Maior atingimento projetado',                 items: melhores },
-      { icon: ArrowDownRight,accent: 'text-amber-600',   bg: 'bg-amber-50',   title: 'Abaixo da média do distrito',    hint: 'Atingimento abaixo da média do próprio distrito', items: abaixoMedia },
-      { icon: CalendarOff,   accent: 'text-orange-600',  bg: 'bg-orange-50',  title: 'Maior volume de abonos',         hint: 'Dias abonados no ciclo',                      items: abonos },
-      { icon: UserX,         accent: 'text-fuchsia-600', bg: 'bg-fuchsia-50', title: 'Alta categoria não visitada',    hint: 'Médicos potencial 1-2 sem visita',  periodo: periodoDetalhe, items: altaCat },
-      { icon: FlaskConical,  accent: 'text-sky-600',     bg: 'bg-sky-50',     title: 'Amostras acima da média',        hint: 'Total de amostras entregues',       periodo: periodoDetalhe, items: maisAmostras },
-      { icon: Layers,        accent: 'text-violet-600',  bg: 'bg-violet-50',  title: 'Visitas a médicos sem segmentação', hint: 'Médicos visitados sem nenhuma segmentação', periodo: periodoDetalhe, items: semSeg },
-    ];
-  }, [setores, mediaDistrito, mediaAmostras, periodoDetalhe]);
+  const periodoDesemp = desempMeta.ini && desempMeta.fim
+    ? `Ciclos ${desempMeta.ini.slice(-2)}–${desempMeta.fim.slice(-2)}/${desempMeta.ano ?? ''}`
+    : undefined;
 
   // Filtra por distrito (client-side) + ordena por potencial (1 = maior).
   const altoPotencialOrdenado = useMemo(
@@ -258,8 +235,10 @@ export default function InsightsPage() {
 
   return (
     <div className="p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {cards.map((def, i) => <InsightCard key={i} def={def} loading={loading} />)}
+      <DesempenhoVisitacaoCard lists={desempLists} periodo={periodoDesemp} loading={loadingDesemp} />
+
+      <div className="mt-4">
+        <VisitacaoEntregaCard distrito={distrito} />
       </div>
 
       {/* Médicos de alto potencial (1-3) sem visita nos últimos 3 ciclos — lista de nomes */}
@@ -303,10 +282,6 @@ export default function InsightsPage() {
           )}
         </CardContent>
       </Card>
-      <p className="text-xs text-slate-400 mt-4">
-        Insights de visita (alta categoria, amostras, segmentação) usam o último ciclo com dados detalhados
-        {periodoDetalhe ? ` (${periodoDetalhe})` : ''}. Os demais usam o ciclo atual.
-      </p>
     </div>
   );
 }

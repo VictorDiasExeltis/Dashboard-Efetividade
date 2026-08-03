@@ -15,4 +15,6 @@ coverage/
 
 # arquivos de carga (contêm dados de médicos — PII, não versionar)
 *.csv
+# exceção: assets do relatório estático da colega precisam ir pro deploy
+!public/relatorio-colega/**/*.csv
 

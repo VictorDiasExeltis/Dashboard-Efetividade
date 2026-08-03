@@ -11,7 +11,7 @@ BEGIN
                 fv.ciclo,
                 fv.cod_setor,
                 COUNT(*) AS total_visitas
-            FROM public.fato_visitas fv
+            FROM public.fato_visitas_fechado fv
             GROUP BY fv.ciclo, fv.cod_setor
         ),
         metas_agrupadas AS (
@@ -40,7 +40,7 @@ BEGIN
                 fv.ciclo,
                 fv.cod_setor,
                 COUNT(*) AS total_visitas
-            FROM public.fato_visitas fv
+            FROM public.fato_visitas_fechado fv
             GROUP BY fv.ciclo, fv.cod_setor
         ),
         metas_agrupadas AS (
@@ -71,7 +71,7 @@ BEGIN
                 fv.ciclo,
                 fv.cod_setor,
                 COUNT(*) AS total_visitas
-            FROM public.fato_visitas fv
+            FROM public.fato_visitas_fechado fv
             GROUP BY fv.ciclo, fv.cod_setor
         ),
         metas_agrupadas AS (

@@ -66,10 +66,13 @@ export async function getCiclos(): Promise<string[]> {
   try {
     await requireUser();
     if (!db) return [];
+    // Só ciclos fechados: o ciclo em andamento (parcial) não aparece nos filtros
+    // das telas consolidadas. A Análise de Ciclo não usa este seletor.
     const result = await db.execute(sql`
       SELECT DISTINCT ciclo
       FROM metas_ciclo
       WHERE ciclo IS NOT NULL
+        AND ciclo IN (SELECT ciclo FROM ciclos_fechados)
       ORDER BY ciclo
     `);
     return result.map((r: any) => r.ciclo as string);

@@ -54,7 +54,8 @@ const _getSetoresHierarquiaCached = cacheLoader(
 // Ciclo exibido    = último ciclo com visitas em fato_visitas.
 // Modelo:
 //   DU             = dias úteis do ciclo (dim_calendario)
-//   dias_decorridos= dias úteis do ciclo <= hoje (ciclo já fechado ⇒ = DU)
+//   dias_decorridos= dias úteis do ciclo < hoje, i.e. ATÉ ONTEM (defasagem de
+//                    carga: hoje ainda não tem dado). Ciclo já fechado ⇒ = DU.
 //   dias_restantes = max(DU − dias_decorridos, 0)
 //   visitas_real   = nº de visitas do setor no ciclo (COUNT fato_visitas)
 //   dias_trabalhados = nº de dias distintos com visita (COUNT DISTINCT data_visita)
@@ -140,7 +141,7 @@ const _getCicloProgressoCached = cacheLoader(
         (SELECT COUNT(*) FROM dim_calendario WHERE ciclo = a.ciclo)::int AS dias_uteis,
         (SELECT COUNT(*) FROM dim_calendario
           WHERE ciclo = a.ciclo
-            AND data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date)::int AS dia_atual
+            AND data < (now() AT TIME ZONE 'America/Sao_Paulo')::date)::int AS dia_atual
       FROM alvo a
       WHERE a.ciclo IS NOT NULL
     `);
@@ -178,11 +179,14 @@ const _getAnaliseDiariaCached = cacheLoader(
         SELECT MAX(ciclo) AS ciclo FROM fato_visitas
       ),
       cal AS (
-        -- Dias úteis do ciclo e quantos já decorreram até hoje (calendário).
+        -- Dias úteis do ciclo e quantos já decorreram ATÉ ONTEM (calendário).
+        -- Por causa da defasagem de carga (dados vão até hoje-1), o dia de hoje
+        -- ainda não tem visita carregada, então não conta como decorrido — senão
+        -- diluiria a MDV e a projeção. Daí data < hoje (e não <=).
         SELECT
           COUNT(*)::int AS dias_uteis,
           COUNT(*) FILTER (
-            WHERE data <= (now() AT TIME ZONE 'America/Sao_Paulo')::date
+            WHERE data < (now() AT TIME ZONE 'America/Sao_Paulo')::date
           )::int AS dias_decorridos
         FROM dim_calendario
         WHERE ciclo = (SELECT ciclo FROM ciclo_alvo)
