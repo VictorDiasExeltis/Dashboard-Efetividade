@@ -3,7 +3,7 @@
 import React, { Suspense } from 'react';
 import { SegmentacaoFilters } from '@/src/components/dashboard/SegmentacaoFilters';
 import { Card, CardContent } from "@/src/components/ui/card";
-import { HelpCircle, Flame } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useLayout } from '@/src/context/LayoutContext';
@@ -287,12 +287,12 @@ export default function VisitacaoXSegmentacao() {
   return (
     <div className="p-6 space-y-6">
 
-      {/* Observação — TODO: preencher o texto definitivo */}
+      {/* Observação */}
       <div className="flex items-center px-1">
         <div className="flex items-center gap-2 text-slate-500">
           <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
           <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            Obs: (preencher)
+            Obs: O Potencial é categorizado de acordo com o Score Exeltis, sendo 5 o menor potencial e 1 o maior.
           </p>
         </div>
       </div>
@@ -319,16 +319,16 @@ export default function VisitacaoXSegmentacao() {
             >
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`p-2 rounded-lg ${p.bg}`}>
-                    <Flame className={`h-5 w-5 ${p.color}`} />
+                  <div className={`px-2 py-0.5 rounded-lg text-xs font-bold ${p.bg} ${p.color}`}>
+                    Potencial {p.nivel}
                   </div>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.bg} ${p.color}`}>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${p.bg} ${p.color}`}>
                     {total.toLocaleString('pt-BR')}
                   </span>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1">
-                    <p className="text-sm font-medium text-slate-500">Potencial {p.nivel}</p>
+                    <p className="text-sm font-medium text-slate-500">Cobertura</p>
                     <span className="group relative inline-flex">
                       <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help shrink-0" />
                       <div className={`absolute bottom-full ${tooltipAlign} mb-2 hidden group-hover:block w-max max-w-[220px] p-2 bg-slate-900 text-white text-[10px] font-normal rounded-md shadow-xl border border-slate-800 z-50 leading-relaxed pointer-events-none normal-case whitespace-normal`}>

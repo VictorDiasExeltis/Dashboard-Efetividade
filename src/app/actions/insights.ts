@@ -169,19 +169,30 @@ export interface DesempenhoVisitacaoResult {
   ano: string | null;
   cicloInicial: string | null;  // menor ciclo incluído (p/ rótulo)
   cicloFinal: string | null;    // maior ciclo incluído
+  metaCobertura: number | null; // meta de cobertura em %, = 90% × (DU médio / 15)
   rows: SetorDesempenho[];
 }
 
-export async function getDesempenhoVisitacao(): Promise<DesempenhoVisitacaoResult> {
+// ciclo: 'Todos' = acumulado do ano (todos os fechados exceto o 01); ou um
+// ciclo fechado específico (ex.: '202607') para recortar a um único ciclo.
+export async function getDesempenhoVisitacao(ciclo: string = 'Todos'): Promise<DesempenhoVisitacaoResult> {
   await requireUser();
-  return _getDesempenhoVisitacaoCached();
+  return _getDesempenhoVisitacaoCached(ciclo);
 }
 
 const _getDesempenhoVisitacaoCached = cacheLoader(
   ['desempenho-visitacao'],
-  async (): Promise<DesempenhoVisitacaoResult> => {
+  async (ciclo: string = 'Todos'): Promise<DesempenhoVisitacaoResult> => {
   try {
-    if (!db) return { ano: null, cicloInicial: null, cicloFinal: null, rows: [] };
+    if (!db) return { ano: null, cicloInicial: null, cicloFinal: null, metaCobertura: null, rows: [] };
+    const umCiclo = !!ciclo && ciclo !== 'Todos';
+    // Recorte de ciclo: um ciclo específico OU o acumulado do ano sem o 01.
+    const metaFiltro = umCiclo
+      ? sql`AND m.ciclo = ${ciclo}`
+      : sql`AND LEFT(m.ciclo, 4) = ano.y AND m.ciclo <> ano.y || '01'`;
+    const visFiltro = umCiclo
+      ? sql`AND fv.ciclo = ${ciclo}`
+      : sql`AND LEFT(fv.ciclo, 4) = ano.y AND fv.ciclo <> ano.y || '01'`;
     const result = await db.execute(sql`
       WITH ano AS (SELECT LEFT(MAX(ciclo), 4) AS y FROM fato_visitas_fechado),
       elig AS (
@@ -190,16 +201,14 @@ const _getDesempenhoVisitacaoCached = cacheLoader(
                SUM(COALESCE(m.dias_trabalhados, 20)) AS dias
         FROM metas_ciclo m, ano
         WHERE m.considerar = TRUE
-          AND LEFT(m.ciclo, 4) = ano.y
-          AND m.ciclo <> ano.y || '01'
+          ${metaFiltro}
           AND m.ciclo IN (SELECT ciclo FROM ciclos_fechados)
         GROUP BY m.cod_setor, m.ciclo
       ),
       vis AS (
         SELECT fv.cod_setor, fv.ciclo, COUNT(*) AS visitas
         FROM fato_visitas_fechado fv, ano
-        WHERE LEFT(fv.ciclo, 4) = ano.y
-          AND fv.ciclo <> ano.y || '01'
+        WHERE TRUE ${visFiltro}
         GROUP BY fv.cod_setor, fv.ciclo
       ),
       por_setor AS (
@@ -217,7 +226,14 @@ const _getDesempenhoVisitacaoCached = cacheLoader(
              CASE WHEN ps.dias   > 0 THEN ps.visitas::numeric / ps.dias   END AS mdv,
              (SELECT MIN(ciclo) FROM elig) AS ciclo_ini,
              (SELECT MAX(ciclo) FROM elig) AS ciclo_fim,
-             (SELECT y FROM ano)           AS ano
+             (SELECT y FROM ano)           AS ano,
+             -- Meta de cobertura (%): 90% × (DU médio dos ciclos incluídos / 15),
+             -- mesmo modelo da Análise de Ciclo (meta_pct = 0.90 × DU/15).
+             (SELECT 0.90 * AVG(cnt) / 15.0 * 100
+                FROM (SELECT COUNT(*)::numeric AS cnt
+                      FROM dim_calendario c
+                      WHERE c.ciclo IN (SELECT DISTINCT ciclo FROM elig)
+                      GROUP BY c.ciclo) z)   AS meta_cob
       FROM por_setor ps
       JOIN dim_hierarquia h ON h.cod_setor = ps.cod_setor
       ORDER BY h.nome_distrito, h.nome_setor
@@ -239,11 +255,12 @@ const _getDesempenhoVisitacaoCached = cacheLoader(
       ano: first?.ano ?? null,
       cicloInicial: first?.ciclo_ini ?? null,
       cicloFinal: first?.ciclo_fim ?? null,
+      metaCobertura: first?.meta_cob != null ? Number(first.meta_cob) : null,
       rows,
     };
   } catch (e) {
     console.error('getDesempenhoVisitacao error:', e);
-    return { ano: null, cicloInicial: null, cicloFinal: null, rows: [] };
+    return { ano: null, cicloInicial: null, cicloFinal: null, metaCobertura: null, rows: [] };
   }
   },
   1800,
@@ -307,6 +324,240 @@ const _getInsightsExtrasCached = cacheLoader(
   } catch (e) {
     console.error('getInsightsExtras error:', e);
     return { cicloDetalhe: null, rows: [] };
+  }
+  },
+  1800,
+);
+
+// ── Resumo automático (regras/templates, sem IA) ────────────────────────────
+// Frases de destaque a partir da série cobertura/MDV por setor×ciclo (só ciclos
+// fechados do ano, sem o 01). Determinístico e auditável — nenhuma chamada a
+// modelo de IA em runtime.
+export type ResumoDirecao = 'down' | 'up' | 'neutro';
+export interface ResumoInsight {
+  tipo:
+    | 'queda_cobertura' | 'mdv_abaixo' | 'maior_queda' | 'maior_alta' | 'recuperacao'
+    | 'painel_mudou' | 'reincidencia_abono' | 'abono_desempenho';
+  direcao: ResumoDirecao;
+  severidade: number;       // ordenação (maior primeiro, dentro do tipo)
+  titulo: string;           // a frase pronta
+  contexto: string | null;  // linha secundária (distrito · rep)
+  distrito: string;         // p/ filtro client-side
+}
+
+export async function getInsightsResumo(): Promise<ResumoInsight[]> {
+  await requireUser();
+  return _getInsightsResumoCached();
+}
+
+const _getInsightsResumoCached = cacheLoader(
+  ['insights-resumo'],
+  async (): Promise<ResumoInsight[]> => {
+  const META_COB = 90;    // % — meta de cobertura (mesma régua do gráfico de linha)
+  const META_MDV = 10.8;  // meta de MDV
+  try {
+    if (!db) return [];
+    const result = await db.execute(sql`
+      WITH ano AS (SELECT LEFT(MAX(ciclo), 4) AS y FROM fato_visitas_fechado),
+      elig AS (
+        SELECT m.cod_setor, m.ciclo,
+               SUM(m.tamanho_painel)                 AS painel,
+               SUM(COALESCE(m.dias_trabalhados, 20)) AS dias
+        FROM metas_ciclo m, ano
+        WHERE m.considerar = TRUE
+          AND LEFT(m.ciclo, 4) = ano.y
+          AND m.ciclo <> ano.y || '01'
+          AND m.ciclo IN (SELECT ciclo FROM ciclos_fechados)
+        GROUP BY m.cod_setor, m.ciclo
+      ),
+      vis AS (
+        SELECT fv.cod_setor, fv.ciclo, COUNT(*) AS visitas
+        FROM fato_visitas_fechado fv, ano
+        WHERE LEFT(fv.ciclo, 4) = ano.y AND fv.ciclo <> ano.y || '01'
+        GROUP BY fv.cod_setor, fv.ciclo
+      ),
+      -- Abonos NÃO-estruturais (fora reunião/convenção/treinamento/feriado) por
+      -- setor×ciclo — os que de fato tiram o rep do campo de forma individual.
+      abo AS (
+        SELECT a.cod_setor, c.ciclo, SUM(COALESCE(a.horas_abonadas, 0)) AS horas
+        FROM fato_abonos a
+        JOIN dim_calendario c ON c.data = a.data_abono
+        WHERE a.motivo !~* 'REUNI|TREINAMENTO|CONVEN|FERIADO'
+        GROUP BY a.cod_setor, c.ciclo
+      )
+      SELECT e.cod_setor, h.nome_setor, h.nome_distrito, h.nome_rep, e.ciclo,
+             e.painel,
+             CASE WHEN e.painel > 0 THEN COALESCE(v.visitas,0)::numeric / e.painel * 100 END AS cobertura,
+             CASE WHEN e.dias   > 0 THEN COALESCE(v.visitas,0)::numeric / e.dias        END AS mdv,
+             COALESCE(ab.horas, 0) AS horas_abono
+      FROM elig e
+      JOIN dim_hierarquia h ON h.cod_setor = e.cod_setor
+      LEFT JOIN vis v  ON v.cod_setor  = e.cod_setor AND v.ciclo  = e.ciclo
+      LEFT JOIN abo ab ON ab.cod_setor = e.cod_setor AND ab.ciclo = e.ciclo
+      ORDER BY e.cod_setor, e.ciclo
+    `);
+
+    type Pt = { ciclo: string; cob: number | null; mdv: number | null; painel: number | null; horas: number };
+    interface Setor { nome: string; distrito: string; rep: string | null; serie: Pt[] }
+    const setores = new Map<number, Setor>();
+    for (const r of result as any[]) {
+      const cod = Number(r.cod_setor);
+      let s = setores.get(cod);
+      if (!s) { s = { nome: r.nome_setor ?? '—', distrito: r.nome_distrito ?? '—', rep: r.nome_rep ?? null, serie: [] }; setores.set(cod, s); }
+      s.serie.push({
+        ciclo: String(r.ciclo),
+        cob: r.cobertura != null ? Number(r.cobertura) : null,
+        mdv: r.mdv != null ? Number(r.mdv) : null,
+        painel: r.painel != null ? Number(r.painel) : null,
+        horas: Number(r.horas_abono) || 0,
+      });
+    }
+    for (const s of setores.values()) s.serie.sort((a, b) => a.ciclo.localeCompare(b.ciclo));
+    const maxCiclo = [...setores.values()].flatMap((s) => s.serie.map((p) => p.ciclo)).reduce((m, c) => (c > m ? c : m), '');
+
+    const fmtCiclo = (c: string) => `Ciclo ${c.slice(-2)}`;
+    const pp = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}pp`;
+    const insights: ResumoInsight[] = [];
+
+    for (const s of setores.values()) {
+      const ctx = s.rep ? `${s.distrito} · ${s.rep}` : s.distrito;
+      const cs = s.serie.filter((p) => p.cob != null).map((p) => ({ ciclo: p.ciclo, v: p.cob as number }));
+      const ms = s.serie.filter((p) => p.mdv != null).map((p) => ({ ciclo: p.ciclo, v: p.mdv as number }));
+
+      // Queda de cobertura: quedas consecutivas terminando no ciclo mais recente.
+      if (cs.length >= 3) {
+        let k = cs.length - 1, quedas = 0;
+        while (k > 0 && cs[k].v < cs[k - 1].v) { quedas++; k--; }
+        if (quedas >= 2) {
+          const ini = cs[cs.length - 1 - quedas], last = cs[cs.length - 1];
+          const delta = last.v - ini.v;
+          insights.push({
+            tipo: 'queda_cobertura', direcao: 'down', severidade: Math.abs(delta) + quedas * 2,
+            titulo: `${s.nome}: cobertura em queda desde o ${fmtCiclo(ini.ciclo)} (${Math.round(ini.v)}% → ${Math.round(last.v)}%, ${pp(delta)}).`,
+            contexto: ctx, distrito: s.distrito,
+          });
+        }
+      }
+
+      // MDV: só sinaliza quando PIOROU recente (cruzou abaixo da meta ou vem
+      // caindo) — evita o ruído do setor cronicamente baixo e estável.
+      if (ms.length >= 3) {
+        const last = ms[ms.length - 1];
+        const ref = ms[ms.length - 3];   // 2 ciclos antes
+        const f = (v: number) => v.toFixed(1).replace('.', ',');
+        if (last.v < META_MDV && (last.v < ref.v - 0.2 || ref.v >= META_MDV)) {
+          const cruzou = ref.v >= META_MDV;   // estava na meta e caiu
+          insights.push({
+            tipo: 'mdv_abaixo', direcao: 'down', severidade: (META_MDV - last.v) + Math.abs(last.v - ref.v) * 2,
+            titulo: cruzou
+              ? `${s.nome}: MDV caiu abaixo da meta (10,8) — ${f(ref.v)} → ${f(last.v)} no ${fmtCiclo(last.ciclo)}.`
+              : `${s.nome}: MDV em queda, ${f(ref.v)} → ${f(last.v)} (abaixo da meta 10,8).`,
+            contexto: ctx, distrito: s.distrito,
+          });
+        }
+      }
+
+      // Recuperação: voltou acima da meta no último ciclo após ≥2 abaixo.
+      if (cs.length >= 3 && cs[cs.length - 1].v >= META_COB) {
+        let k = cs.length - 2, abaixo = 0;
+        while (k >= 0 && cs[k].v < META_COB) { abaixo++; k--; }
+        if (abaixo >= 2) {
+          insights.push({
+            tipo: 'recuperacao', direcao: 'up', severidade: abaixo,
+            titulo: `${s.nome}: recuperou — cobertura voltou acima da meta no ${fmtCiclo(cs[cs.length - 1].ciclo)} após ${abaixo} ciclos abaixo.`,
+            contexto: ctx, distrito: s.distrito,
+          });
+        }
+      }
+
+      // A5 — Painel mudou: variação relevante do tamanho do painel (muda a base
+      // de comparação; contextualiza quedas/altas de cobertura).
+      const psrie = s.serie.filter((p) => p.painel != null).map((p) => p.painel as number);
+      if (psrie.length >= 3) {
+        const lastP = psrie[psrie.length - 1], refP = psrie[psrie.length - 3];
+        const dv = lastP - refP, rel = refP > 0 ? dv / refP : 0;
+        if (Math.abs(dv) >= 20 && Math.abs(rel) >= 0.15) {
+          insights.push({
+            tipo: 'painel_mudou', direcao: 'neutro', severidade: Math.abs(rel) * 10,
+            titulo: `${s.nome}: painel ${dv > 0 ? 'cresceu' : 'encolheu'} de ${refP} → ${lastP} médicos (${dv > 0 ? '+' : ''}${Math.round(dv)}, ${Math.round(rel * 100)}%) — muda a base de comparação.`,
+            contexto: ctx, distrito: s.distrito,
+          });
+        }
+      }
+
+      // B8 — Reincidência de abono: ciclos SEGUIDOS com abono não-estrutural.
+      let ka = s.serie.length - 1, streak = 0, horasStreak = 0;
+      while (ka >= 0 && s.serie[ka].horas > 0) { streak++; horasStreak += s.serie[ka].horas; ka--; }
+      if (streak >= 3) {
+        insights.push({
+          tipo: 'reincidencia_abono', direcao: 'neutro', severidade: streak + horasStreak / 50,
+          titulo: `${s.nome}: abonos recorrentes — ${streak} ciclos seguidos com abono não-estrutural (${Math.round(horasStreak)}h no total).`,
+          contexto: ctx, distrito: s.distrito,
+        });
+      }
+
+      // B10 — Abono explica queda: cobertura caindo E abono nos ciclos recentes.
+      if (cs.length >= 3) {
+        const cobDelta = cs[cs.length - 1].v - cs[cs.length - 3].v;
+        const ult3 = s.serie.slice(-3);
+        const nAbono = ult3.filter((p) => p.horas > 0).length;
+        const horas3 = ult3.reduce((a, p) => a + p.horas, 0);
+        if (cobDelta <= -5 && nAbono >= 2) {
+          insights.push({
+            tipo: 'abono_desempenho', direcao: 'down', severidade: Math.abs(cobDelta) + nAbono * 3 + horas3 / 50,
+            titulo: `${s.nome}: cobertura em queda (${pp(cobDelta)}) e ${nAbono} dos últimos 3 ciclos com abono (${Math.round(horas3)}h) — abono pode explicar.`,
+            contexto: ctx, distrito: s.distrito,
+          });
+        }
+      }
+    }
+
+    // Agregações no ciclo mais recente: maior queda + setores abaixo por distrito.
+    let pior: { nome: string; distrito: string; delta: number } | null = null;
+    let melhor: { nome: string; distrito: string; delta: number } | null = null;
+    for (const s of setores.values()) {
+      const cs = s.serie.filter((p) => p.cob != null).map((p) => ({ ciclo: p.ciclo, v: p.cob as number }));
+      if (cs.length < 2) continue;
+      const last = cs[cs.length - 1];
+      if (last.ciclo !== maxCiclo) continue;
+      const delta = last.v - cs[cs.length - 2].v;
+      if (delta < 0 && (!pior || delta < pior.delta)) pior = { nome: s.nome, distrito: s.distrito, delta };
+      if (delta > 0 && (!melhor || delta > melhor.delta)) melhor = { nome: s.nome, distrito: s.distrito, delta };
+    }
+    if (pior) insights.push({
+      tipo: 'maior_queda', direcao: 'down', severidade: Math.abs(pior.delta) + 5,
+      titulo: `Maior queda do ${fmtCiclo(maxCiclo)}: ${pior.nome} (${pp(pior.delta)} de cobertura vs ciclo anterior).`,
+      contexto: pior.distrito, distrito: pior.distrito,
+    });
+    if (melhor) insights.push({
+      tipo: 'maior_alta', direcao: 'up', severidade: melhor.delta + 5,
+      titulo: `Maior alta do ${fmtCiclo(maxCiclo)}: ${melhor.nome} (${pp(melhor.delta)} de cobertura vs ciclo anterior).`,
+      contexto: melhor.distrito, distrito: melhor.distrito,
+    });
+
+    // Seleção balanceada: garante que cada tipo apareça (recuperação e visão por
+    // distrito não ficam soterradas por quedas/MDV). Exibe por prioridade + severidade.
+    const prio: Record<ResumoInsight['tipo'], number> = {
+      abono_desempenho: 9, queda_cobertura: 8, maior_queda: 7, mdv_abaixo: 6,
+      reincidencia_abono: 5, maior_alta: 4, painel_mudou: 3, recuperacao: 1,
+    };
+    const topN = (t: ResumoInsight['tipo'], n: number) =>
+      insights.filter((i) => i.tipo === t).sort((a, b) => b.severidade - a.severidade).slice(0, n);
+    const sel = [
+      ...topN('abono_desempenho', 3),
+      ...topN('queda_cobertura', 4),
+      ...topN('maior_queda', 1),
+      ...topN('maior_alta', 1),
+      ...topN('mdv_abaixo', 3),
+      ...topN('reincidencia_abono', 3),
+      ...topN('painel_mudou', 2),
+      ...topN('recuperacao', 2),
+    ];
+    sel.sort((a, b) => (prio[b.tipo] - prio[a.tipo]) || (b.severidade - a.severidade));
+    return sel;
+  } catch (e) {
+    console.error('getInsightsResumo error:', e);
+    return [];
   }
   },
   1800,

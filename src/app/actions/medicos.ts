@@ -12,25 +12,31 @@ import type { MedicoNaoVisitado } from './medicos.types';
 // 30min. requireUser fica FORA do cache (auth precisa rodar sempre).
 // soFechado=true → usa só ciclos fechados (tela de Insights). Default false →
 // inclui o ciclo aberto/parcial (tela Target List, visão operacional ao vivo).
+// ciclo: 'Todos' = janela dos 3 ciclos mais recentes; um ciclo específico
+// (ex.: '202607') restringe o "sem visita" àquele único ciclo (filtro de Insights).
 export async function getMedicosNaoVisitados(
   distrito: string = 'Todos',
   setor:    string = 'Todos',
   soFechado: boolean = false,
+  ciclo:     string = 'Todos',
 ): Promise<MedicoNaoVisitado[]> {
   await requireUser();
-  return fetchMedicosNaoVisitadosCached(distrito, setor, soFechado);
+  return fetchMedicosNaoVisitadosCached(distrito, setor, soFechado, ciclo);
 }
 
 const fetchMedicosNaoVisitadosCached = unstable_cache(
-  async (distrito: string, setor: string, soFechado: boolean): Promise<MedicoNaoVisitado[]> => {
+  async (distrito: string, setor: string, soFechado: boolean, ciclo: string): Promise<MedicoNaoVisitado[]> => {
   try {
     if (!db) return [];
 
-    // Fonte de visitas e janela dos "3 ciclos recentes" conforme o modo.
+    // Fonte de visitas e janela de ciclos conforme o modo. Um ciclo específico
+    // colapsa a janela para aquele ciclo; senão usa os 3 mais recentes.
     const fv = soFechado ? sql`fato_visitas_fechado` : sql`fato_visitas`;
-    const ciclos3 = soFechado
-      ? sql`SELECT ciclo FROM ciclos_fechados ORDER BY ciclo DESC LIMIT 3`
-      : sql`SELECT DISTINCT ciclo FROM metas_ciclo ORDER BY ciclo DESC LIMIT 3`;
+    const ciclos3 = (!!ciclo && ciclo !== 'Todos')
+      ? sql`SELECT ${ciclo}::varchar AS ciclo`
+      : soFechado
+        ? sql`SELECT ciclo FROM ciclos_fechados ORDER BY ciclo DESC LIMIT 3`
+        : sql`SELECT DISTINCT ciclo FROM metas_ciclo ORDER BY ciclo DESC LIMIT 3`;
 
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')
       ? sql`AND EXISTS (

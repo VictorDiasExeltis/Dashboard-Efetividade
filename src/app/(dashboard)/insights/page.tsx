@@ -2,11 +2,13 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { TrendingDown, TrendingUp, UserX, Target, Gauge, Activity } from 'lucide-react';
+import { TrendingDown, TrendingUp, UserX, Target, Gauge, Activity, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent } from '@/src/components/ui/card';
+import { Button } from '@/src/components/ui/button';
 import { useLayout } from '@/src/context/LayoutContext';
 import { InsightsFilters } from '@/src/components/dashboard/InsightsFilters';
-import { VisitacaoEntregaCard } from '@/src/components/dashboard/VisitacaoEntregaCard';
+import { InsightsResumoCards } from '@/src/components/dashboard/InsightsResumoCards';
 import { getDesempenhoVisitacao, type SetorDesempenho } from '@/src/app/actions/insights';
 import { getMedicosNaoVisitados } from '@/src/app/actions/medicos';
 import type { MedicoNaoVisitado } from '@/src/app/actions/medicos.types';
@@ -135,6 +137,7 @@ export default function InsightsPage() {
   const [loadingDesemp, setLoadingDesemp] = useState(true);
 
   const distrito = searchParams.get('distrito') || 'Todos';
+  const ciclo    = searchParams.get('ciclo')    || 'Todos';
 
   useEffect(() => {
     setHeaderState({
@@ -149,11 +152,12 @@ export default function InsightsPage() {
     return () => setHeaderState({});
   }, [setHeaderState]);
 
-  // Desempenho de Visitação — cobertura/MDV por setor no acumulado do ano (sem ciclo 1).
+  // Desempenho de Visitação — cobertura/MDV por setor. Ciclo 'Todos' = acumulado
+  // do ano (sem ciclo 1); um ciclo = recorte àquele ciclo fechado.
   useEffect(() => {
     let cancelled = false;
     setLoadingDesemp(true);
-    getDesempenhoVisitacao()
+    getDesempenhoVisitacao(ciclo)
       .then((d) => {
         if (cancelled) return;
         setDesempRows(d.rows);
@@ -161,15 +165,14 @@ export default function InsightsPage() {
       })
       .finally(() => { if (!cancelled) setLoadingDesemp(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [ciclo]);
 
-  // Médicos potencial 1-3 sem visita nos últimos 3 ciclos (lista de nomes).
-  // Busca UMA vez (todos os distritos) e filtra no client — evita re-rodar a
-  // query pesada a cada troca de distrito.
+  // Médicos potencial 1-3 sem visita na janela (3 ciclos recentes ou o ciclo
+  // selecionado). Busca por ciclo (todos os distritos) e filtra distrito no client.
   useEffect(() => {
     let cancelled = false;
     setLoadingMed(true);
-    getMedicosNaoVisitados('Todos', 'Todos', true)
+    getMedicosNaoVisitados('Todos', 'Todos', true, ciclo)
       .then((meds) => {
         if (cancelled) return;
         setAltoPotencial(
@@ -178,7 +181,7 @@ export default function InsightsPage() {
       })
       .finally(() => { if (!cancelled) setLoadingMed(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [ciclo]);
 
   // ── Desempenho de Visitação: 4 listas (top-5) vs. média do distrito ──
   const desempLists = useMemo<DesempLists>(() => {
@@ -216,7 +219,9 @@ export default function InsightsPage() {
   }, [desempRows, distrito]);
 
   const periodoDesemp = desempMeta.ini && desempMeta.fim
-    ? `Ciclos ${desempMeta.ini.slice(-2)}–${desempMeta.fim.slice(-2)}/${desempMeta.ano ?? ''}`
+    ? desempMeta.ini === desempMeta.fim
+      ? `Ciclo ${desempMeta.fim.slice(-2)}/${desempMeta.ano ?? ''}`
+      : `Ciclos ${desempMeta.ini.slice(-2)}–${desempMeta.fim.slice(-2)}/${desempMeta.ano ?? ''}`
     : undefined;
 
   // Filtra por distrito (client-side) + ordena por potencial (1 = maior).
@@ -227,6 +232,22 @@ export default function InsightsPage() {
     [altoPotencial, distrito],
   );
 
+  // Exporta a lista atual (após filtro de distrito) para .xlsx.
+  function handleExportMedicos() {
+    const rows = altoPotencialOrdenado.map((m) => ({
+      Nome:      m.nome_medico,
+      CRMUF:     m.crmuf,
+      Setor:     m.nome_setor ?? '',
+      Distrito:  m.nome_distrito ?? '',
+      Potencial: m.potencial ?? '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Alto potencial não visitado');
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `alto-potencial-nao-visitado_${today}.xlsx`);
+  }
+
   const POT_BADGE: Record<number, string> = {
     1: 'bg-rose-100 text-rose-700 border-rose-200',
     2: 'bg-orange-100 text-orange-700 border-orange-200',
@@ -235,13 +256,13 @@ export default function InsightsPage() {
 
   return (
     <div className="p-6">
-      <DesempenhoVisitacaoCard lists={desempLists} periodo={periodoDesemp} loading={loadingDesemp} />
+      <InsightsResumoCards distrito={distrito} />
 
       <div className="mt-4">
-        <VisitacaoEntregaCard distrito={distrito} />
+        <DesempenhoVisitacaoCard lists={desempLists} periodo={periodoDesemp} loading={loadingDesemp} />
       </div>
 
-      {/* Médicos de alto potencial (1-3) sem visita nos últimos 3 ciclos — lista de nomes */}
+      {/* Médicos de alto potencial (1-3) sem visita na janela — lista de nomes */}
       <Card className="border border-slate-200 shadow-sm bg-white mt-4">
         <CardContent className="p-5">
           <div className="flex items-start gap-3 mb-4">
@@ -253,8 +274,20 @@ export default function InsightsPage() {
                   {altoPotencialOrdenado.length} médicos
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">Potencial 1 a 3, sem visita nos últimos 3 ciclos{distrito !== 'Todos' ? ` — ${distrito}` : ''}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Potencial 1 a 3, sem visita {ciclo === 'Todos' ? 'nos últimos 3 ciclos' : `no ciclo ${ciclo.slice(-2)}`}{distrito !== 'Todos' ? ` — ${distrito}` : ''}
+              </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportMedicos}
+              disabled={loadingMed || altoPotencialOrdenado.length === 0}
+              className="gap-1.5 shrink-0"
+            >
+              <Download className="w-4 h-4" />
+              Exportar
+            </Button>
           </div>
 
           {loadingMed ? (

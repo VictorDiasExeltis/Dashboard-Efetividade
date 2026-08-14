@@ -233,7 +233,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
       <div className="grid grid-cols-1 gap-8">
         <GraficoCobertura />
         <GraficoMDV />
-        <CoberturaMdvScatter distrito={filtroDistrito} />
+        <CoberturaMdvScatter />
 
         {/* ─── Análise de Abonos por Ciclo ────────────────────────
             Donut e tabela compartilham o mesmo filtro de ciclo.

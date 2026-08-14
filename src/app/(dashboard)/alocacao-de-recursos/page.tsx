@@ -16,7 +16,7 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
-import { Package, Users, Percent, Shield, HelpCircle } from 'lucide-react';
+import { Package, Users, Percent, Shield, HelpCircle, UserCheck } from 'lucide-react';
 import { DashboardFilters } from '@/src/components/dashboard/DashboardFilters';
 import { getAvailableSetores, getAmostrasData } from '@/src/app/actions';
 import { useLayout } from '@/src/context/LayoutContext';
@@ -89,6 +89,30 @@ const CustomLineLabel = (props: any) => {
   );
 };
 
+// Rótulo de valor dentro da barra: texto branco com contorno da cor da barra.
+// paintOrder="stroke" desenha o contorno atrás do preenchimento (texto legível).
+function BarValueLabel({ x, y, width, height, value, color }: any) {
+  if (value == null || x == null) return null;
+  const cx = Number(x) + Number(width) / 2;
+  const cy = Number(y) + Number(height) - 12;
+  return (
+    <text
+      x={cx}
+      y={cy}
+      textAnchor="middle"
+      fontSize={12}
+      fontWeight="bold"
+      fill="#ffffff"
+      stroke={color}
+      strokeWidth={2.5}
+      paintOrder="stroke"
+      style={{ strokeLinejoin: 'round' }}
+    >
+      {Number(value).toLocaleString('pt-BR')}
+    </text>
+  );
+}
+
 const CHART = {
   grid: '#f1f5f9',
   tick: '#64748b',
@@ -139,6 +163,7 @@ function AlocacaoDeRecursosContent() {
   const [classData, setClassData]   = useState<Array<{ classificacao: string; medicos: number; mediaAmostras: number }>>([]);
   const [totalAmostras, setTotalAmostras]           = useState(0);
   const [totalMedicosPainel, setTotalMedicosPainel] = useState(0);
+  const [totalMedicosComAmostra, setTotalMedicosComAmostra] = useState(0);
   const [loading, setLoading]       = useState(false);
 
   // Legendas interativas (multi-seleção por clique). Um destaque independente
@@ -178,11 +203,12 @@ function AlocacaoDeRecursosContent() {
   useEffect(() => {
     setLoading(true);
     getAmostrasData(distrito, setor, ciclo, produto)
-      .then(({ bySegmentacao, byClassificacao, totalAmostras, totalMedicosPainel }) => {
+      .then(({ bySegmentacao, byClassificacao, totalAmostras, totalMedicosPainel, totalMedicosComAmostra }) => {
         setSegData(bySegmentacao);
         setClassData(byClassificacao);
         setTotalAmostras(totalAmostras);
         setTotalMedicosPainel(totalMedicosPainel);
+        setTotalMedicosComAmostra(totalMedicosComAmostra);
       })
       .finally(() => setLoading(false));
   }, [distrito, setor, ciclo, produto]);
@@ -200,15 +226,14 @@ function AlocacaoDeRecursosContent() {
     return () => setHeaderState({});
   }, [setHeaderState, availableSetores]);
 
-  // Denominador da média = soma dos médicos que receberam amostra em cada
-  // segmentação (respeita o filtro atual). Médico multi-marca conta uma vez
-  // por segmentação — duplicação intencional, casa com a linha do gráfico.
-  const medicosComAmostra = segData.reduce((acc, s) => acc + s.medicos, 0);
-  const mediaGeral       = medicosComAmostra > 0
-    ? (totalAmostras / medicosComAmostra).toFixed(1)
+  // Média de amostras entregues = total de amostras ÷ médicos DISTINTOS que
+  // receberam amostra (sem duplicar médico multi-marca). Respeita o filtro atual.
+  const mediaGeral = totalMedicosComAmostra > 0
+    ? (totalAmostras / totalMedicosComAmostra).toFixed(1)
     : '–';
   const totalAmostrasFmt = totalAmostras.toLocaleString('pt-BR');
   const totalMedicosFmt  = totalMedicosPainel.toLocaleString('pt-BR');
+  const medicosComAmostraFmt = totalMedicosComAmostra.toLocaleString('pt-BR');
 
   const kpiCards = [
     {
@@ -221,13 +246,22 @@ function AlocacaoDeRecursosContent() {
       tooltip: "Total de médicos únicos ativos cadastrados no painel."
     },
     {
+      title: "Médicos com Amostra",
+      value: medicosComAmostraFmt,
+      description: "Receberam ao menos uma amostra",
+      icon: UserCheck,
+      color: "text-teal-600",
+      bg: "bg-teal-50",
+      tooltip: "Número de médicos distintos que receberam ao menos uma amostra no período/filtro (sem duplicar médicos que receberam de mais de uma marca)."
+    },
+    {
       title: "Média Geral de Amostras",
       value: mediaGeral,
       description: "Média por médico",
       icon: Package,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
-      tooltip: "Quantidade média de amostras entregues por médico atendido (Total de Amostras / soma dos médicos que receberam amostra em cada segmentação, conforme o filtro)."
+      tooltip: "Quantidade média de amostras entregues por médico (Total de Amostras / nº de médicos distintos que receberam amostra, conforme o filtro)."
     },
     {
       title: "Total de Amostras Entregues",
@@ -254,7 +288,7 @@ function AlocacaoDeRecursosContent() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map((kpi) => (
           <Card key={kpi.title} className="border border-slate-200 shadow-sm bg-white">
             <CardContent className="p-6">
@@ -356,12 +390,15 @@ function AlocacaoDeRecursosContent() {
                       name="Nº de Médicos"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={72}
+                      minPointSize={3}
                       fillOpacity={segActive('Nº de Médicos') ? 1 : 0.2}
                     >
                       {segData.map((entry, i) => (
                         <Cell key={`cell-${i}`} fill={`url(#${getSegGradient(entry.segmentacao).id})`} />
                       ))}
-                      <LabelList dataKey="medicos" position="insideBottom" fill="#ffffff" fontSize={12} fontWeight="bold" offset={10} formatter={(v: any) => v.toLocaleString('pt-BR')} />
+                      <LabelList dataKey="medicos" content={(props: any) => (
+                        <BarValueLabel {...props} color={getSegGradient(segData[props.index]?.segmentacao ?? '').solid} />
+                      )} />
                     </Bar>
                     <Line
                       yAxisId="right"
@@ -453,12 +490,15 @@ function AlocacaoDeRecursosContent() {
                       name="Nº de Médicos"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={72}
+                      minPointSize={3}
                       fillOpacity={classActive('Nº de Médicos') ? 1 : 0.2}
                     >
                       {classData.map((_, i) => (
                         <Cell key={`cell-${i}`} fill={`url(#${CLASS_GRADIENTS[i % CLASS_GRADIENTS.length].id})`} />
                       ))}
-                      <LabelList dataKey="medicos" position="insideBottom" fill="#ffffff" fontSize={12} fontWeight="bold" offset={10} formatter={(v: any) => v.toLocaleString('pt-BR')} />
+                      <LabelList dataKey="medicos" content={(props: any) => (
+                        <BarValueLabel {...props} color={CLASS_GRADIENTS[props.index % CLASS_GRADIENTS.length].solid} />
+                      )} />
                     </Bar>
                     <Line
                       yAxisId="right"

@@ -1,12 +1,15 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid,
   Tooltip, ReferenceLine, Cell, ResponsiveContainer,
 } from 'recharts';
 import { ScatterChart as ScatterIcon } from 'lucide-react';
-import { Card, CardContent } from '@/src/components/ui/card';
+import {
+  Card, CardContent, CardHeader, CardTitle, CardDescription,
+} from '@/src/components/ui/card';
 import { getDesempenhoVisitacao, type SetorDesempenho } from '@/src/app/actions/insights';
 
 type Gran = 'setor' | 'distrito';
@@ -19,20 +22,23 @@ interface Ponto {
   visitas: number;
 }
 
+// Meta fixa de MDV (mesma referência do gráfico de MDV da tela).
+const META_MDV = 10.8;
+
 const COR = {
-  bom:   '#059669',  // alta cobertura + alto MDV
-  ruim:  '#e11d48',  // baixa cobertura + baixo MDV
-  misto: '#d97706',  // um alto, outro baixo
+  bom:   '#059669',  // acima da meta em cobertura E MDV
+  ruim:  '#e11d48',  // abaixo da meta nos dois
+  misto: '#d97706',  // um acima, outro abaixo
   grid:  '#f1f5f9',
   tick:  '#64748b',
-  ref:   '#94a3b8',
+  meta:  '#ef4444',  // linhas de meta (mesmo vermelho dos gráficos de linha)
 };
 
-function quadranteCor(p: Ponto, mx: number, my: number): string {
-  const cobAlta = p.x >= mx;
-  const mdvAlto = p.y >= my;
-  if (cobAlta && mdvAlto) return COR.bom;
-  if (!cobAlta && !mdvAlto) return COR.ruim;
+function quadranteCor(p: Ponto, metaCob: number, metaMdv: number): string {
+  const cobOk = p.x >= metaCob;
+  const mdvOk = p.y >= metaMdv;
+  if (cobOk && mdvOk) return COR.bom;
+  if (!cobOk && !mdvOk) return COR.ruim;
   return COR.misto;
 }
 
@@ -52,34 +58,54 @@ function CustomTooltip({ active, payload }: any) {
   );
 }
 
-// Auto-suficiente: busca cobertura/MDV por setor (ano sem ciclo 1). `distrito`
-// vem da tela onde é montado; 'Todos' mostra todos os setores.
-export function CoberturaMdvScatter({ distrito = 'Todos' }: { distrito?: string }) {
+// Legenda em pílulas, no mesmo formato dos gráficos de linha da tela.
+function LegendaPill({ cor, children }: { cor: string; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-600 shadow-sm">
+      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: cor }} />
+      {children}
+    </span>
+  );
+}
+
+// Auto-suficiente: lê os filtros da tela (ciclo/distrito/setor/estrutura) da URL
+// e busca cobertura/MDV por setor. Linhas de meta: MDV cravada em 10.8 e
+// cobertura na meta do ciclo filtrado (90% × DU/15).
+export function CoberturaMdvScatter() {
+  const searchParams = useSearchParams();
+  const estrutura = searchParams.get('estrutura') || 'Distrito';
+  const distrito  = searchParams.get('distrito')  || 'Todos';
+  const setor     = searchParams.get('setor')     || 'Todos';
+  const ciclo     = searchParams.get('ciclo')     || 'Todos';
+
   const [mounted, setMounted] = useState(false);
-  const [gran, setGran] = useState<Gran>('setor');
   const [rows, setRows] = useState<SetorDesempenho[]>([]);
+  const [metaCob, setMetaCob] = useState<number>(90);
   const [loading, setLoading] = useState(true);
-  const [periodo, setPeriodo] = useState<string | undefined>(undefined);
+
+  // Granularidade dos pontos segue a Estrutura da tela: Setor → um ponto por
+  // setor; Distrito/Brasil → um ponto por distrito.
+  const gran: Gran = estrutura === 'Setor' ? 'setor' : 'distrito';
 
   useEffect(() => { setMounted(true); }, []);
 
+  // Recarrega ao trocar o ciclo (recorte de dados + meta de cobertura).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getDesempenhoVisitacao()
+    getDesempenhoVisitacao(ciclo)
       .then((d) => {
         if (cancelled) return;
         setRows(d.rows);
-        setPeriodo(d.cicloInicial && d.cicloFinal
-          ? `Ciclos ${d.cicloInicial.slice(-2)}–${d.cicloFinal.slice(-2)}/${d.ano ?? ''}`
-          : undefined);
+        setMetaCob(d.metaCobertura != null ? d.metaCobertura : 90);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [ciclo]);
 
   const pontos = useMemo<Ponto[]>(() => {
-    const base = rows.filter((r) => distrito === 'Todos' || r.nome_distrito === distrito);
+    let base = rows.filter((r) => distrito === 'Todos' || r.nome_distrito === distrito);
+    if (setor !== 'Todos') base = base.filter((r) => r.nome_setor === setor);
     if (gran === 'setor') {
       return base
         .filter((r) => r.cobertura != null && r.mdv != null)
@@ -95,60 +121,55 @@ export function CoberturaMdvScatter({ distrito = 'Todos' }: { distrito?: string 
     return [...acc.entries()]
       .filter(([, a]) => a.p > 0 && a.d > 0)
       .map(([nome, a]) => ({ x: (a.v / a.p) * 100, y: a.v / a.d, nome, distrito: nome, visitas: a.v }));
-  }, [rows, distrito, gran]);
+  }, [rows, distrito, setor, gran]);
 
-  // Médias (linhas de referência → quadrantes).
-  const { mx, my, xDom, yDom } = useMemo(() => {
-    if (!pontos.length) return { mx: 0, my: 0, xDom: [0, 100] as [number, number], yDom: [0, 15] as [number, number] };
-    const xs = pontos.map((p) => p.x), ys = pontos.map((p) => p.y);
-    const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
-    const pad = (min: number, max: number, f: number) => {
-      const g = Math.max((max - min) * 0.12, f);
-      return [Math.floor(min - g), Math.ceil(max + g)] as [number, number];
+  // Domínios SIMÉTRICOS em torno das metas, para as duas linhas ficarem sempre
+  // centralizadas (X na meta de cobertura, Y na meta de MDV = 10.8). R = maior
+  // distância de um ponto à meta + folga (com um mínimo pra não achatar).
+  const { xDom, yDom } = useMemo(() => {
+    if (!pontos.length) return { xDom: [metaCob - 20, metaCob + 20] as [number, number], yDom: [META_MDV - 5, META_MDV + 5] as [number, number] };
+    const rx = Math.max(...pontos.map((p) => Math.abs(p.x - metaCob)), 5) * 1.12;
+    const ry = Math.max(...pontos.map((p) => Math.abs(p.y - META_MDV)), 1) * 1.12;
+    return {
+      xDom: [metaCob - rx, metaCob + rx] as [number, number],
+      yDom: [META_MDV - ry, META_MDV + ry] as [number, number],
     };
-    return { mx: avg(xs), my: avg(ys), xDom: pad(Math.min(...xs), Math.max(...xs), 2), yDom: pad(Math.min(...ys), Math.max(...ys), 1) };
-  }, [pontos]);
+  }, [pontos, metaCob]);
+
+  const granLabel = gran === 'setor' ? 'Setor' : 'Distrito';
 
   return (
-    <Card className="border border-slate-200 shadow-sm bg-white">
-      <CardContent className="p-5">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="p-2 rounded-lg bg-blue-50 shrink-0"><ScatterIcon className="h-5 w-5 text-blue-600" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-slate-800 text-sm">Cobertura × MDV</h3>
-              {periodo && (
-                <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">{periodo}</span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">Cada ponto = {gran === 'setor' ? 'um setor' : 'um distrito'}. Linhas tracejadas = média{distrito !== 'Todos' ? ` — ${distrito}` : ''}</p>
-          </div>
-          {/* Toggle setor / distrito */}
-          <div className="shrink-0 flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-[11px] font-semibold">
-            {(['setor', 'distrito'] as Gran[]).map((g) => (
-              <button
-                key={g}
-                onClick={() => setGran(g)}
-                className={`px-2.5 py-1 rounded-md capitalize transition-colors ${gran === g ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
+    <Card className="border-slate-200 bg-white shadow-sm">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+          <ScatterIcon className="h-5 w-5 text-blue-600" />
+          Cobertura × MDV por {granLabel}
+        </CardTitle>
+        <CardDescription className="text-slate-500 mt-1">
+          Cada ponto = um {gran}. Linhas tracejadas = meta
+          {distrito !== 'Todos' ? ` em ${distrito}` : ''}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {/* Legenda em pílulas (formato dos demais gráficos) */}
+        <div className="flex flex-wrap justify-center gap-2 pb-4 select-none">
+          <LegendaPill cor={COR.bom}>Cobertura e MDV acima da meta</LegendaPill>
+          <LegendaPill cor={COR.misto}>Um acima, outro abaixo</LegendaPill>
+          <LegendaPill cor={COR.ruim}>Ambos abaixo da meta</LegendaPill>
         </div>
 
-        <div className="h-[380px] w-full">
+        <div className="h-[400px] w-full">
           {loading ? (
             <div className="h-full bg-slate-100 rounded-lg animate-pulse" />
           ) : pontos.length === 0 ? (
             <div className="h-full flex items-center justify-center text-xs text-slate-400">Sem dados.</div>
           ) : mounted && (
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 16, right: 24, bottom: 28, left: 8 }}>
+              <ScatterChart margin={{ top: 16, right: 30, bottom: 28, left: 12 }}>
                 <CartesianGrid stroke={COR.grid} />
                 <XAxis
                   type="number" dataKey="x" name="Cobertura" domain={xDom}
-                  tickFormatter={(v) => `${v}%`} axisLine={false} tickLine={false}
+                  tickFormatter={(v) => `${Math.round(v)}%`} axisLine={false} tickLine={false}
                   tick={{ fill: COR.tick, fontSize: 11 }}
                   label={{ value: 'Cobertura', position: 'insideBottom', offset: -14, fill: COR.tick, fontSize: 12 }}
                 />
@@ -159,24 +180,17 @@ export function CoberturaMdvScatter({ distrito = 'Todos' }: { distrito?: string 
                   label={{ value: 'MDV', angle: -90, position: 'insideLeft', fill: COR.tick, fontSize: 12 }}
                 />
                 <ZAxis type="number" dataKey="visitas" range={[40, 260]} />
-                <ReferenceLine x={mx} stroke={COR.ref} strokeDasharray="5 5"
-                  label={{ value: `méd ${mx.toFixed(0)}%`, position: 'top', fill: COR.ref, fontSize: 10 }} />
-                <ReferenceLine y={my} stroke={COR.ref} strokeDasharray="5 5"
-                  label={{ value: `méd ${my.toFixed(1)}`, position: 'right', fill: COR.ref, fontSize: 10 }} />
+                <ReferenceLine x={metaCob} stroke={COR.meta} strokeDasharray="5 5" strokeWidth={1.5}
+                  label={{ value: `Meta ${metaCob.toFixed(0)}%`, position: 'top', fill: COR.meta, fontSize: 11, fontWeight: 600 }} />
+                <ReferenceLine y={META_MDV} stroke={COR.meta} strokeDasharray="5 5" strokeWidth={1.5}
+                  label={{ value: `Meta ${META_MDV.toFixed(1)}`, position: 'right', fill: COR.meta, fontSize: 11, fontWeight: 600 }} />
                 <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
                 <Scatter data={pontos} fillOpacity={0.78}>
-                  {pontos.map((p, i) => <Cell key={i} fill={quadranteCor(p, mx, my)} />)}
+                  {pontos.map((p, i) => <Cell key={i} fill={quadranteCor(p, metaCob, META_MDV)} />)}
                 </Scatter>
               </ScatterChart>
             </ResponsiveContainer>
           )}
-        </div>
-
-        {/* Legenda de quadrantes */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[11px] text-slate-500">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: COR.bom }} /> Cobertura e MDV acima da média</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: COR.misto }} /> Um acima, outro abaixo</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: COR.ruim }} /> Ambos abaixo da média</span>
         </div>
       </CardContent>
     </Card>

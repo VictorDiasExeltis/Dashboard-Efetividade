@@ -146,33 +146,10 @@ function formatScoreK(score: number | null | undefined): string {
 // Rank de importância do potencial (não é o valor numérico): 1 > 2 > 3 > 4 > 5 > 0.
 // Quanto menor o rank, MAIS importante. 0 é o menos importante (rank 6).
 // Retorna null pra valores ausentes — o sort joga esses pro fim.
+// Ainda usado na ordenação e nos KPIs; a coluna visível de Potencial foi removida.
 function potencialRank(value: number | null | undefined): number | null {
   if (value == null) return null;
   return value === 0 ? 6 : value;
-}
-
-// Escala de potencial: 1 = MAIOR potencial, 5 = MENOR potencial.
-// Badge vai do rosa intenso (1) ao cinza (5).
-const POTENCIAL_BADGE: Record<number, string> = {
-  1: 'bg-rose-100   text-rose-700   border-rose-300',
-  2: 'bg-orange-100 text-orange-700 border-orange-300',
-  3: 'bg-amber-100  text-amber-800  border-amber-300',
-  4: 'bg-amber-50   text-amber-700  border-amber-200',
-  5: 'bg-slate-100  text-slate-700  border-slate-200',
-  0: 'bg-slate-100  text-slate-600  border-slate-200',
-};
-
-function PotencialBadge({ value }: { value: number | null | undefined }) {
-  if (value == null) return <span className="text-slate-300 text-xs">–</span>;
-  const cls = POTENCIAL_BADGE[value] ?? 'bg-slate-100 text-slate-700 border-slate-200';
-  return (
-    <span className={cn(
-      'inline-flex items-center justify-center w-5 h-5 rounded-md border text-[10px] font-semibold tabular-nums',
-      cls,
-    )}>
-      {value}
-    </span>
-  );
 }
 
 // Abrevia nomes do meio: "JOAO PEDRO DA SILVA SANTOS" → "JOAO P. DA S. SANTOS".
@@ -478,9 +455,6 @@ export function TargetListClient() {
                 <th className="px-2 py-2.5 font-medium">
                   <SortHeader label="Score Exeltis" myKey="score" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} />
                 </th>
-                <th className="px-2 py-2.5 font-medium text-center">
-                  <SortHeader label="Potencial" myKey="potencial" sortKey={sortKey} sortDir={sortDir} onClick={handleSortClick} align="center" />
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -501,14 +475,11 @@ export function TargetListClient() {
                     <td className="px-4 py-3">
                       <div className="h-6 w-20 bg-slate-200 rounded-full animate-pulse" />
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="h-6 w-6 mx-auto bg-slate-200 rounded animate-pulse" />
-                    </td>
                   </tr>
                 ))
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={PRODUCT_COLUMNS.length + 3} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={PRODUCT_COLUMNS.length + 2} className="px-4 py-12 text-center text-slate-500">
                     Nenhum médico encontrado com os filtros atuais.
                   </td>
                 </tr>
@@ -541,9 +512,6 @@ export function TargetListClient() {
                             {formatScoreK(doc.score)}
                           </div>
                         )}
-                      </td>
-                      <td className="px-2 py-2.5 text-center">
-                        <PotencialBadge value={doc.potencial} />
                       </td>
                     </tr>
                   );

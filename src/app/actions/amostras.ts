@@ -15,6 +15,7 @@ export async function getAmostrasData(
   byClassificacao: Array<{ classificacao: string; medicos: number; mediaAmostras: number }>;
   totalAmostras: number;
   totalMedicosPainel: number;
+  totalMedicosComAmostra: number;
 }> {
   await requireUser();
   return _getAmostrasDataCached(distrito, setor, ciclo, produto);
@@ -24,7 +25,7 @@ const _getAmostrasDataCached = cacheLoader(
   ['amostras-data'],
   async (distrito: string, setor: string, ciclo: string, produto: string) => {
   try {
-    if (!db) return { bySegmentacao: [], byClassificacao: [], totalAmostras: 0, totalMedicosPainel: 0 };
+    if (!db) return { bySegmentacao: [], byClassificacao: [], totalAmostras: 0, totalMedicosPainel: 0, totalMedicosComAmostra: 0 };
 
     // Valores parametrizados (sql`${v}` vira bind param) — nunca interpolar
     // input do cliente como SQL cru (sql.raw) sob risco de injection.
@@ -82,7 +83,7 @@ const _getAmostrasDataCached = cacheLoader(
       ? sql`AND p.nome_produto IN (${produtoInList})`
       : sql``;
 
-    const [segResult, classResult, totalResult, painelResult] = await Promise.all([
+    const [segResult, classResult, totalResult, painelResult, medicosComAmostraResult] = await Promise.all([
       // Segmentação determinada pela MARCA do produto efetivamente entregue.
       // Um médico que recebe amostras de marcas diferentes aparece em cada
       // segmentação correspondente; se não tem segmentação cadastrada para a
@@ -150,6 +151,19 @@ const _getAmostrasDataCached = cacheLoader(
         ${territorioMedicoJoin}
         WHERE m.status = TRUE
       `),
+      // Médicos DISTINTOS que receberam ao menos uma amostra (sem duplicar por
+      // marca). Mesmos filtros de território/ciclo/produto do total de amostras.
+      db.execute(sql`
+        SELECT COUNT(DISTINCT v.crmuf)::integer AS total_medicos
+        FROM fato_amostras a
+        INNER JOIN fato_visitas v ON v.id_visita = a.id_visita
+        WHERE TRUE
+          ${territorioJoin}
+          ${cicloJoin}
+          ${hasProduto ? sql`AND a.id_produto IN (
+            SELECT id_produto FROM dim_produtos WHERE nome_produto IN (${produtoInList})
+          )` : sql``}
+      `),
     ]);
 
     return {
@@ -165,12 +179,13 @@ const _getAmostrasDataCached = cacheLoader(
         medicos:       Number(r.total_medicos  || 0),
         mediaAmostras: Number(r.media_amostras || 0),
       })),
-      totalAmostras:      Number((totalResult[0]  as any)?.total_amostras || 0),
-      totalMedicosPainel: Number((painelResult[0] as any)?.total_medicos  || 0),
+      totalAmostras:          Number((totalResult[0]  as any)?.total_amostras || 0),
+      totalMedicosPainel:     Number((painelResult[0] as any)?.total_medicos  || 0),
+      totalMedicosComAmostra: Number((medicosComAmostraResult[0] as any)?.total_medicos || 0),
     };
   } catch (e) {
     console.error('getAmostrasData error:', e);
-    return { bySegmentacao: [], byClassificacao: [], totalAmostras: 0, totalMedicosPainel: 0 };
+    return { bySegmentacao: [], byClassificacao: [], totalAmostras: 0, totalMedicosPainel: 0, totalMedicosComAmostra: 0 };
   }
   },
   1800,

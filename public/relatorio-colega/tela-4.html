@@ -403,7 +403,7 @@ h1,h2,h3,h4,h5{font-family:'Sora',sans-serif}
     <button class="tab-btn" onclick="switchTab('previsao')">🔮 Previsão & Trends</button>
     <button class="tab-btn" onclick="switchTab('regional')">🗺️ Análise Regional</button>
     <button class="tab-btn" onclick="switchTab('setorial')">⚖️ COMPARAÇÃO MARCAS</button>
-    <button class="tab-btn" onclick="switchTab('curvas')">📈 CURVAS & CENÁRIOS</button>
+    <button class="tab-btn" id="tab-btn-curvas" onclick="tryAccessCurvas(event)">🔒 CURVAS & CENÁRIOS</button>
   </div>
 </div>
 
@@ -539,6 +539,7 @@ h1,h2,h3,h4,h5{font-family:'Sora',sans-serif}
     <div class="card">
       <div class="card-title">📈 Contexto Histórico <span class="badge tooltip-info" id="spark-periodo-badge" data-tip="Carregando...">6 meses ℹ</span></div>
       <div id="sparklines-container"></div>
+      <div id="card-recomendacao" style="display:none"></div>
     </div>
     <div class="card">
       <div class="card-title">🔮 Forecast — Market Share</div>
@@ -592,6 +593,7 @@ h1,h2,h3,h4,h5{font-family:'Sora',sans-serif}
       <div style="display:flex;gap:6px">
         <button id="hm-btn-tabela" onclick="hmSetView('tabela')" class="model-btn active" style="font-size:11px;padding:4px 10px">📊 Tabela</button>
         <button id="hm-btn-grafico" onclick="hmSetView('grafico')" class="model-btn" style="font-size:11px;padding:4px 10px">📈 Gráfico</button>
+        <button id="hm-btn-excel" onclick="exportarHeatmap()" class="model-btn" style="font-size:11px;padding:4px 10px" title="Exporta a tabela como esta na tela">⬇ Excel</button>
       </div>
     </div>
     <div id="hm-toggles-container" class="hm-toggles"></div>
@@ -823,7 +825,7 @@ function getDatasetsApres(mercado,marca,terr,nTotal,nHist,modelo,cenario,metrica
   aps.forEach(function(apres){
     var ser=ad.series[apres]&&ad.series[apres][terr];if(!ser)return;
     var src=metrica==='doses'?ser.doses:ser.shares;if(!src||!src.length)return;
-    var fcs=metrica==='doses'?getForecastsDoses(src):getForecasts(src);
+    var fcs=metrica==='doses'?getForecastsDoses(src):getForecastsShare(ser.doses,mercado,terr,null,HORIZON,marca===currentMarca);
     var fc=cenario==='conservador'?fcs.cenarios.conservador:cenario==='otimista'?fcs.cenarios.otimista:fcs.modelos[modelo]||fcs.cenarios.realista;
     var hd=[...src,...Array(nTotal-nHist).fill(null)];
     var pd=[...Array(nHist-1).fill(null),src[nHist-1],...fc];
@@ -887,6 +889,53 @@ function toggleRotulos() {
   allCharts.forEach(function(c){ c.update('none'); });
 }
 
+
+// Controle de acesso aba Curvas
+var curvasDesbloqueado = false;
+var CURVAS_SENHA = 'Exeltis2026';
+
+function tryAccessCurvas(e) {
+  if (curvasDesbloqueado) {
+    switchTab('curvas');
+    // reativar aba visualmente como ativa
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+    document.getElementById('tab-curvas').classList.add('active');
+    document.getElementById('tab-btn-curvas').classList.add('active');
+    requestAnimationFrame(function(){ renderCurvas(); });
+    return;
+  }
+  var modal = document.getElementById('modal-curvas');
+  modal.style.display = 'flex';
+  document.getElementById('curvas-pwd-input').value = '';
+  document.getElementById('curvas-pwd-erro').textContent = '';
+  setTimeout(function(){ document.getElementById('curvas-pwd-input').focus(); }, 50);
+}
+
+function fecharModalCurvas() {
+  document.getElementById('modal-curvas').style.display = 'none';
+}
+
+function submitCurvasPwd() {
+  var pwd = document.getElementById('curvas-pwd-input').value;
+  if (pwd === CURVAS_SENHA) {
+    curvasDesbloqueado = true;
+    document.getElementById('modal-curvas').style.display = 'none';
+    // Desbloquear: trocar icone do botao
+    var btn = document.getElementById('tab-btn-curvas');
+    if (btn) btn.innerHTML = '📈 CURVAS & CENÁRIOS';
+    // Ativar a aba
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+    document.getElementById('tab-curvas').classList.add('active');
+    document.getElementById('tab-btn-curvas').classList.add('active');
+    requestAnimationFrame(function(){ renderCurvas(); });
+  } else {
+    document.getElementById('curvas-pwd-erro').textContent = 'Senha incorreta. Tente novamente.';
+    document.getElementById('curvas-pwd-input').value = '';
+    document.getElementById('curvas-pwd-input').focus();
+  }
+}
 let currentMercado = '01 - Mercado COC + POP - 50+';
 let currentMarca   = 'SLINDA';
 let currentTerr    = 'Brasil';
@@ -1085,6 +1134,13 @@ const MODEL_NAMES = {
 // ════════════════════════════════════════════════════════════════
 const HORIZON = 9;
 
+function isEmCrescimento(series) {
+  if (!series || series.length < 5) return false;
+  var rec = series.slice(-4);
+  var slope = (rec[3] - rec[0]) / 3;
+  var avg = rec.reduce(function(a,b){return a+b;},0) / 4;
+  return slope > 0 && avg > 0 && (slope / avg) > 0.01;
+}
 function forecastLinear(shares, h=HORIZON){
   const n=shares.length, ma=shares.slice(-6).reduce((a,b)=>a+b,0)/Math.min(6,n);
   return Array.from({length:h},()=>Math.max(0,Math.min(100,parseFloat(ma.toFixed(2)))));
@@ -1134,6 +1190,239 @@ function forecastEnsemble(shares, h=HORIZON){
   const f1=forecastTendencia(shares,h), f2=forecastHW(shares,h), f3=forecastARIMA(shares,h);
   return Array.from({length:h},(_,i)=>parseFloat((0.25*f1[i]+0.40*f2[i]+0.35*f3[i]).toFixed(2)));
 }
+// ===== BOTTOM-UP: so o REP e projetado; GD e Brasil sao somas =====
+var _buCache={};
+function repsDoTerritorio(md, terr){
+  var out=[];
+  if(!md||!md.hierarquia) return out;
+  if(terr && terr.indexOf('GD:')===0){
+    var g=terr.slice(3);
+    (md.hierarquia[g]||[]).forEach(function(r){ out.push('REP:'+r); });
+  } else {
+    Object.keys(md.hierarquia).forEach(function(g){
+      md.hierarquia[g].forEach(function(r){ out.push('REP:'+r); });
+    });
+  }
+  return out;
+}
+function getDoseFcBU(mercadoNome, serieKey, terr, h){
+  h=h||HORIZON;
+  var ck=mercadoNome+'||'+serieKey+'||'+terr+'||'+h;
+  if(_buCache[ck]) return _buCache[ck];
+  var md=RAW_DATA[mercadoNome];
+  var res=null;
+  if(md && md.series[serieKey]){
+    if(terr && terr.indexOf('REP:')===0){
+      var s=md.series[serieKey][terr];
+      res=(s&&s.doses)?getForecastsDoses(s.doses,h):null;
+    } else {
+      var reps=repsDoTerritorio(md, terr), acc=null;
+      reps.forEach(function(rt){
+        var sub=getDoseFcBU(mercadoNome, serieKey, rt, h);
+        if(!sub) return;
+        if(!acc){
+          acc={modelos:{},cenarios:{},bias:1};
+          Object.keys(sub.modelos).forEach(function(k){ acc.modelos[k]=new Array(h); for(var i=0;i<h;i++) acc.modelos[k][i]=0; });
+          Object.keys(sub.cenarios).forEach(function(k){ acc.cenarios[k]=new Array(h); for(var i=0;i<h;i++) acc.cenarios[k][i]=0; });
+        }
+        Object.keys(sub.modelos).forEach(function(k){
+          if(!acc.modelos[k]) return;
+          for(var i=0;i<h;i++) acc.modelos[k][i]+=(sub.modelos[k][i]||0);
+        });
+        Object.keys(sub.cenarios).forEach(function(k){
+          if(!acc.cenarios[k]) return;
+          for(var i=0;i<h;i++) acc.cenarios[k][i]+=(sub.cenarios[k][i]||0);
+        });
+      });
+      res=acc;
+    }
+  }
+  _buCache[ck]=res;
+  return res;
+}
+// wrapper para os call sites de doses
+function fcDoses(ser, serieKey, terr, mercadoNome){
+  var r=(serieKey&&terr)?getDoseFcBU(mercadoNome||currentMercado, serieKey, terr, HORIZON):null;
+  return r || getForecastsDoses(ser&&ser.doses?ser.doses:(ser||[]));
+}
+var _mktProjCache={};
+function limparCachesProjecao(){ _mktProjCache={}; _buCache={};  }
+function getMarketTotalProjModel(mercadoNome, terr, seg, h, modelKey){
+  var ck=mercadoNome+'||'+terr+'||'+(seg||'')+'||'+h+'||'+modelKey;
+  if(_mktProjCache[ck]) return _mktProjCache[ck];
+  var md=RAW_DATA[mercadoNome]; if(!md) return null;
+  var lista=(seg && md.segMarcas && md.segMarcas[seg])?md.segMarcas[seg]:md.marcas;
+  var tot=new Array(h); for(var z=0;z<h;z++) tot[z]=0;
+  lista.forEach(function(m){
+    var key=seg?(m+'|'+seg):m;
+    var s=md.series[key]&&md.series[key][terr];
+    if(!s||!s.doses) return;
+    var _bu=getDoseFcBU(mercadoNome,key,terr,h);
+    var f=_bu?_bu.modelos[modelKey]:getForecastsDoses(s.doses,h).modelos[modelKey];
+    if(!f) return;
+    for(var k=0;k<h;k++) tot[k]+=(f[k]||0);
+  });
+  _mktProjCache[ck]=tot;
+  return tot;
+}
+function getMarketTotalProj(mercadoNome, terr, seg, h){
+  return getMarketTotalProjModel(mercadoNome, terr, seg, h||HORIZON, 'ensemble');
+}
+function getForecastsShare(doses, mercadoNome, terr, seg, h, isSel, serieKey){
+  h=h||HORIZON;
+  var fd=(serieKey?getDoseFcBU(mercadoNome,serieKey,terr,h):null)||getForecastsDoses(doses,h);
+  var md=RAW_DATA[mercadoNome]; if(!md) return fd;
+  function pct(v,t){ return (t>0)?parseFloat(Math.min(100,v/t*100).toFixed(2)):0; }
+  var out={modelos:{},cenarios:{}};
+  Object.keys(fd.modelos).forEach(function(k){
+    var tot=getMarketTotalProjModel(mercadoNome,terr,seg,h,k);
+    out.modelos[k]=fd.modelos[k].map(function(v,i){ return pct(v,(tot&&tot[i])?tot[i]:0); });
+  });
+  var totEns=getMarketTotalProjModel(mercadoNome,terr,seg,h,'ensemble');
+  var selKey=seg?(currentMarca+'|'+seg):currentMarca;
+  var selSer=md.series[selKey]&&md.series[selKey][terr];
+  var fdSel=getDoseFcBU(mercadoNome,selKey,terr,h)||((selSer&&selSer.doses)?getForecastsDoses(selSer.doses,h):null);
+  Object.keys(fd.cenarios).forEach(function(ck){
+    var num=isSel?fd.cenarios[ck]:fd.cenarios.realista;
+    var D=totEns;
+    if(ck!=='realista' && fdSel && totEns){
+      D=new Array(h);
+      for(var i=0;i<h;i++){
+        D[i]=(totEns[i]||0)-(fdSel.cenarios.realista[i]||0)+((fdSel.cenarios[ck]&&fdSel.cenarios[ck][i])||0);
+      }
+    }
+    out.cenarios[ck]=num.map(function(v,i){ return pct(v,(D&&D[i])?D[i]:0); });
+  });
+  return out;
+}
+// ===== BACKTEST: qual modelo teria acertado mais nos ultimos meses =====
+// ===== FORECAST IDEALIZADO (referencia mensal informada pela area) =====
+var FORECAST_IDEAL_MES = 'Jul/26';
+var FORECAST_IDEAL = {
+  '01 - Mercado COC + POP - 50+':                        { 'SLINDA': 207279 },
+  '02 - Mercado Infec\u00e7\u00f5es Vaginais - Marcas Promovidas': { 'GYNOTRAN': 30590 },
+  '04 - Mercado Gesta\u00e7\u00e3o':                            { 'FAM\u00cdLIA REGENESIS': 122151,
+                                                           'FAM\u00cdLIA REGENESIS|PREMIUM': 65182,
+                                                           'FAM\u00cdLIA REGENESIS|ESSENTIAL': 38097 },
+  '05 - Mercado Pre Gesta\u00e7\u00e3o - Enriquecido':          { 'FAM\u00cdLIA REGENESIS': 18872 },
+  '06 - Mercado Progesterona':                           { 'GYNPRO': 93349 },
+  '08 - Mercado Ferro Isolado_Suplementos':              { 'HEMOLIP': 16581 },
+  '29 - LARC - Anel':                                    { 'EXELRING': 9364 },
+  '33 - Mercado Infec\u00e7\u00f5es Urin\u00e1rias':               { 'VIZURIA': 2454 }
+};
+var MODELO_LABEL={ensemble:'Ensemble (Realista)',conservador:'Conservador',otimista:'Otimista',tendencia:'MA + Tendencia',suavizacao:'Suavizacao Exp.',linear:'Linear'};
+var MODELO_CENARIO={ensemble:'Realista',conservador:'Conservador',otimista:'Otimista',tendencia:'Realista',suavizacao:'Realista',linear:'Realista'};
+
+function exportarHeatmap(){
+  var tbl=document.getElementById('heatmap-table');
+  if(!tbl || !tbl.rows.length){ alert('Nao ha dados na tabela para exportar.'); return; }
+  var SEP=';';
+  function limpa(t){
+    return (t||'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function celula(t){
+    t=limpa(t);
+    if(t==='' || t==='-') return '';
+    // percentual ou numero -> formato pt-BR sem separador de milhar (Excel entende)
+    var m=t.replace(/\./g,'').replace(',','.').replace('%','');
+    if(/^-?\d+(\.\d+)?$/.test(m)){
+      var v=parseFloat(m);
+      var s=(t.indexOf('%')>=0)? v.toFixed(2) : (Math.abs(v%1)>0? v.toFixed(2) : String(Math.round(v)));
+      return s.replace('.',',');
+    }
+    if(t.indexOf(SEP)>=0 || t.indexOf('"')>=0) return '"'+t.replace(/"/g,'""')+'"';
+    return t;
+  }
+  var linhas=[];
+  // cabecalho de contexto
+  var metricaTxt=(currentMetrica==='doses')?'Doses':'Market Share (%)';
+  var cenarioTxt=(currentCenario==='conservador')?'Conservador':(currentCenario==='otimista')?'Otimista':'Realista';
+  linhas.push(['Mapa de Calor Regional'].join(SEP));
+  linhas.push(['Mercado',currentMercado].map(celula).join(SEP));
+  linhas.push(['Marca',currentMarca].map(celula).join(SEP));
+  if(currentSegmento) linhas.push(['Segmento',currentSegmento].map(celula).join(SEP));
+  linhas.push(['Metrica',metricaTxt].map(celula).join(SEP));
+  linhas.push(['Modelo',currentModelo].map(celula).join(SEP));
+  linhas.push(['Cenario',cenarioTxt].map(celula).join(SEP));
+  linhas.push(['Ultimo mes real',DATA_ATU?String(DATA_ATU):''].map(celula).join(SEP));
+  linhas.push(['Exportado em',new Date().toLocaleString('pt-BR')].map(celula).join(SEP));
+  linhas.push('');
+  // corpo da tabela
+  for(var i=0;i<tbl.rows.length;i++){
+    var r=tbl.rows[i], out=[];
+    for(var j=0;j<r.cells.length;j++){
+      var cel=r.cells[j];
+      var txt=limpa(cel.innerText!==undefined?cel.innerText:cel.textContent);
+      // primeira coluna: preserva a hierarquia com recuo
+      if(j===0 && i>0){
+        var cls=(r.className||'');
+        if(cls.indexOf('hm-rep')>=0 || cel.style.paddingLeft) txt='   '+txt;
+      }
+      out.push(celula(txt));
+    }
+    linhas.push(out.join(SEP));
+  }
+  var csv=linhas.join('\r\n');
+  var blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+  var nome='mapa_calor_'+String(currentMarca).replace(/[^A-Za-z0-9]+/g,'_')
+          +'_'+(currentMetrica==='doses'?'doses':'share')
+          +'_'+new Date().toISOString().slice(0,10)+'.csv';
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=nome;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(a.href); },100);
+}
+
+function renderRecomendacao(){
+  var el=document.getElementById('card-recomendacao'); if(!el) return;
+  var md=RAW_DATA[currentMercado];
+  if(!md){ el.style.display='none'; el.innerHTML=''; return; }
+  var segKey=(currentSegmento && md.series[currentMarca+'|'+currentSegmento])?(currentMarca+'|'+currentSegmento):currentMarca;
+  var tabela=FORECAST_IDEAL[currentMercado]||{};
+  var ideal=tabela[segKey];
+  if(ideal===undefined || !md.series[segKey]){ el.style.display='none'; el.innerHTML=''; return; }
+  var fc=getDoseFcBU(currentMercado, segKey, 'Brasil', HORIZON);
+  if(!fc){ el.style.display='none'; el.innerHTML=''; return; }
+  var cand={ ensemble:fc.cenarios.realista, conservador:fc.cenarios.conservador, otimista:fc.cenarios.otimista,
+             tendencia:fc.modelos.tendencia, suavizacao:fc.modelos.suavizacao, linear:fc.modelos.linear };
+  var res=[];
+  Object.keys(cand).forEach(function(k){
+    var a=cand[k]; if(!a||a[0]===undefined||a[0]===null) return;
+    res.push({modelo:k, proj:a[0], dif:Math.abs(a[0]-ideal)/ideal*100, sinal:(a[0]-ideal)});
+  });
+  if(!res.length){ el.style.display='none'; return; }
+  res.sort(function(a,b){return a.dif-b.dif;});
+  el.style.display='block';
+  var win=res[0], cen=MODELO_CENARIO[win.modelo]||'Realista';
+  var atual=(currentCenario==='conservador')?'Conservador':(currentCenario==='otimista')?'Otimista':'Realista';
+  var ok=(atual===cen);
+  var linhas=res.map(function(r,ix){
+    var st=ix===0?'font-weight:700;color:#166534':'color:#64748b';
+    return '<tr><td style="padding:2px 8px 2px 0;'+st+'">'+(ix===0?'\u2713 ':'')+(MODELO_LABEL[r.modelo]||r.modelo)+'</td>'
+         + '<td style="padding:2px 6px 2px 0;text-align:right;'+st+'">'+Math.round(r.proj).toLocaleString('pt-BR')+'</td>'
+         + '<td style="padding:2px 0;text-align:right;'+st+'">'+(r.sinal>=0?'+':'-')+r.dif.toFixed(1)+'%</td></tr>';
+  }).join('');
+  el.innerHTML =
+    '<div style="margin-top:10px;border:1px solid '+(ok?'#bbf7d0':'#fde68a')+';background:'+(ok?'#f0fdf4':'#fffbeb')+';border-radius:8px;padding:10px 12px">'
+   + '<div style="font-size:11px;font-weight:700;color:#1e2d3d;margin-bottom:2px">'+(ok?'\u2705 ':'\u26a0\ufe0f ')+'Cenario recomendado: '+cen+'</div>'
+   + '<div style="font-size:10px;color:#475569;margin-bottom:7px">Proximidade ao forecast idealizado de <b>'+FORECAST_IDEAL_MES+'</b> ('
+   + Math.round(ideal).toLocaleString('pt-BR')+' doses, Brasil). '
+   + (ok?'O cenario selecionado e o mais indicado.':'Voce esta no cenario <b>'+atual+'</b>. Considere trocar para <b>'+cen+'</b>.')
+   + '</div>'
+   + '<table style="font-size:10px;border-collapse:collapse;width:100%"><thead><tr>'
+   + '<th style="text-align:left;font-size:9px;color:#94a3b8;font-weight:600;padding-bottom:3px">MODELO</th>'
+   + '<th style="text-align:right;font-size:9px;color:#94a3b8;font-weight:600;padding-bottom:3px">PROJ. BRASIL</th>'
+   + '<th style="text-align:right;font-size:9px;color:#94a3b8;font-weight:600;padding-bottom:3px">VS IDEAL</th>'
+   + '</tr></thead><tbody>'+linhas+'</tbody></table></div>';
+}
+function fcShare(ser, serieKey, terr){
+  if(!ser||!ser.doses) return getForecasts(ser?(ser.shares||[]):[]);
+  var sk=''+(serieKey||'');
+  var seg=(sk.indexOf('|')>=0)?sk.split('|')[1]:null;
+  var base=(sk.indexOf('|')>=0)?sk.split('|')[0]:sk;
+  return getForecastsShare(ser.doses, currentMercado, terr, seg, HORIZON, base===currentMarca, sk);
+}
 function getForecasts(shares, h=HORIZON){
   const fc={
     linear:forecastLinear(shares,h), tendencia:forecastTendencia(shares,h),
@@ -1162,7 +1451,7 @@ function monteCarloRanking(marcaAlvo, mercadoData, territorio, h=HORIZON, N=600)
       marcas.forEach(m=>{
         const ser=mercadoData.series[m][territorio];
         if(!ser){simShares[m]=0;return;}
-        const fc=getForecasts(ser.shares,h);
+        const fc=getForecastsShare(ser.doses,currentMercado,territorio,(currentSegmento&&(''+m).indexOf('|')>=0?(''+m).split('|')[1]:null),h,((''+m).split('|')[0]===currentMarca));
         const std=stdDev(ser.shares.slice(-6))||0.5;
         simShares[m]=Math.max(0,fc.cenarios.realista[t]+(Math.random()-0.5)*2*std);
       });
@@ -1190,14 +1479,14 @@ function detectThreatsOpps(marcaAlvo, mercadoData, territorio, h=HORIZON){
   const myRank = terSer.ranks[terSer.ranks.length-1];
 
   // Projecao da marca alvo com modelo e cenario selecionados
-  function getFcArr(shares){
-    var fcs = getForecasts(shares, h);
+  function getFcArr(shares, _ser, _key){
+    var fcs = (_ser&&_ser.doses)?getForecastsShare(_ser.doses,currentMercado,territorio,(_key&&_key.indexOf('|')>=0?_key.split('|')[1]:null),h,((''+_key).split('|')[0]===currentMarca)):getForecasts(shares, h);
     return currentCenario==='conservador' ? fcs.cenarios.conservador
          : currentCenario==='otimista'    ? fcs.cenarios.otimista
          : fcs.modelos[currentModelo]     || fcs.cenarios.realista;
   }
 
-  const myFc = getFcArr(terSer.shares);
+  const myFc = getFcArr(terSer.shares, terSer, marcaAlvo);
 
   const threats=[], opps=[];
   marcas.forEach(function(m){
@@ -1205,7 +1494,7 @@ function detectThreatsOpps(marcaAlvo, mercadoData, territorio, h=HORIZON){
     if(!ser) return;
     var theirRank  = ser.ranks[ser.ranks.length-1];
     var theirTrend = calcTrend3m(ser.shares);
-    var theirFc    = getFcArr(ser.shares);
+    var theirFc    = getFcArr(ser.shares, ser, m);
 
     // Ameaca: concorrente com rank PIOR (numero maior) que a marca, mas projecao ultrapassa
     if(theirRank > myRank){
@@ -1290,6 +1579,7 @@ function init(){
 }
 
 function onMercadoChange(){
+  limparCachesProjecao();
   const mercado = document.getElementById('f-mercado').value;
   const md = RAW_DATA[mercado];
 
@@ -1406,8 +1696,8 @@ function render(){
   const n = shares.length;
   
   // Calcular forecasts com base nos dados reais completos
-  const fcs = getForecasts(shares);
-  const fcsDoses = getForecastsDoses(doses);
+  const fcs = fcShare(ser, (currentSegmento&&md.series[currentMarca+'|'+currentSegmento]?currentMarca+'|'+currentSegmento:currentMarca), currentTerr);
+  const fcsDoses = fcDoses(ser, (currentSegmento&&md.series[currentMarca+'|'+currentSegmento]?currentMarca+'|'+currentSegmento:currentMarca), currentTerr);
   const fcDosesToShow = currentCenario === 'conservador' ? fcsDoses.cenarios.conservador :
                         currentCenario === 'otimista'    ? fcsDoses.cenarios.otimista    :
                         fcsDoses.modelos[currentModelo] || fcsDoses.cenarios.realista;
@@ -1555,6 +1845,7 @@ function render(){
   }
   
   // ── SPARKLINES ──
+  renderRecomendacao();
   renderSparklines(shares, doses, ranks, periodos);
   
   // ── FORECAST CHART ──
@@ -1814,9 +2105,9 @@ function renderHeatmap(md, marca, periodos, periodoBase, metrica='share'){
   const badge = document.getElementById('heatmap-badge');
   if(badge) badge.textContent = `GDs × ${realPers[0]} → ${projPers[projPers.length-1]}`;
 
-  const getFcVal = (ser, projIdx) => {
+  const getFcVal = (ser, projIdx, terrKey) => {
     if(!ser) return 0;
-    const fcs = metrica==='doses' ? getForecastsDoses(ser.doses) : getForecasts(ser.shares);
+    const fcs = metrica==='doses' ? fcDoses(ser, marca, terrKey) : fcShare(ser, marca, terrKey);
     const fc  = currentCenario==='conservador' ? fcs.cenarios.conservador
               : currentCenario==='otimista'    ? fcs.cenarios.otimista
               : fcs.modelos[currentModelo]     || fcs.cenarios.realista;
@@ -1830,7 +2121,7 @@ function renderHeatmap(md, marca, periodos, periodoBase, metrica='share'){
     gds.forEach(gd => {
       const s = md.series[marca]['GD:'+gd];
       if(!s) return;
-      const v = isProj ? getFcVal(s, ci - realPers.length) : (metrica==='doses' ? (s.doses[periodos.indexOf(p)] || 0) : (s.shares[periodos.indexOf(p)] || 0));
+      const v = isProj ? getFcVal(s, ci - realPers.length, 'GD:'+gd) : (metrica==='doses' ? (s.doses[periodos.indexOf(p)] || 0) : (s.shares[periodos.indexOf(p)] || 0));
       tot += v; cnt++;
     });
     mktAvg[p] = cnt > 0 ? tot/cnt : 0;
@@ -1856,7 +2147,7 @@ function renderHeatmap(md, marca, periodos, periodoBase, metrica='share'){
     let v = 0;
     if(brasilSer){
       const rawVal = metrica==='doses' ? (brasilSer.doses[periodos.indexOf(p)] || 0) : (brasilSer.shares[periodos.indexOf(p)] || 0);
-      v = isProj ? getFcVal(brasilSer, ci - realPers.length) : rawVal;
+      v = isProj ? getFcVal(brasilSer, ci - realPers.length, 'Brasil') : rawVal;
     }
     const avg = mktAvg[p] || 1;
     const colorCls = v >= avg*1.1 ? 'hm-high' : v >= avg*0.9 ? 'hm-med' : 'hm-low';
@@ -1883,7 +2174,7 @@ function renderHeatmap(md, marca, periodos, periodoBase, metrica='share'){
       let v = 0;
       if(gdSer){
         const rawVal = metrica==='doses' ? (gdSer.doses[periodos.indexOf(p)] || 0) : (gdSer.shares[periodos.indexOf(p)] || 0);
-        v = isProj ? getFcVal(gdSer, ci - realPers.length) : rawVal;
+        v = isProj ? getFcVal(gdSer, ci - realPers.length, 'GD:'+gd) : rawVal;
       }
       const avg = mktAvg[p] || 1;
       const colorCls = v >= avg*1.1 ? 'hm-high' : v >= avg*0.9 ? 'hm-med' : 'hm-low';
@@ -1905,7 +2196,7 @@ function renderHeatmap(md, marca, periodos, periodoBase, metrica='share'){
         let v = 0;
         if(repSer){
           const rawVal = metrica==='doses' ? (repSer.doses[periodos.indexOf(p)] || 0) : (repSer.shares[periodos.indexOf(p)] || 0);
-          v = isProj ? getFcVal(repSer, ci - realPers.length) : rawVal;
+          v = isProj ? getFcVal(repSer, ci - realPers.length, 'REP:'+rep) : rawVal;
         }
         const avg = mktAvg[p] || 1;
         const colorCls = v >= avg*1.1 ? 'hm-high' : v >= avg*0.9 ? 'hm-med' : 'hm-low';
@@ -1957,9 +2248,9 @@ function renderHeatmapChart(){
     '#6a4c93','#1982c4','#8ac926','#ff595e','#ffca3a','#52b788','#f77f00','#c77dff'
   ];
 
-  const getFcVal = (ser, projIdx) => {
+  const getFcVal = (ser, projIdx, terrKey) => {
     if(!ser) return null;
-    const fcs = currentMetrica==='doses' ? getForecastsDoses(ser.doses) : getForecasts(ser.shares);
+    const fcs = currentMetrica==='doses' ? fcDoses(ser, marca, terrKey) : fcShare(ser, marca, terrKey);
     const fc  = currentCenario==='conservador' ? fcs.cenarios.conservador
               : currentCenario==='otimista'    ? fcs.cenarios.otimista
               : fcs.modelos[currentModelo]     || fcs.cenarios.realista;
@@ -1967,11 +2258,11 @@ function renderHeatmapChart(){
   };
 
 
-  const getSerVals = (ser) => {
+  const getSerVals = (ser, terrKey) => {
     if(!ser) return allCols.map(()=>null);
     return allCols.map((p, ci) => {
       if(ci < nReal){ const idx=periodos.indexOf(p); return idx>=0?(currentMetrica==='doses'?ser.doses[idx]:ser.shares[idx]):null; }
-      return getFcVal(ser, ci - nReal);
+      return getFcVal(ser, ci - nReal, terrKey);
     });
   };
   const datasets = [];
@@ -1979,7 +2270,7 @@ function renderHeatmapChart(){
   // Brasil
   const brasilSer = md.series[marca]['Brasil'];
   if(brasilSer){
-    const vals = getSerVals(brasilSer);
+    const vals = getSerVals(brasilSer, 'Brasil');
     datasets.push({ label:'🇧🇷 Brasil', data:vals.map((v,i)=>i<nReal?v:null), borderColor:'#1e5fa8', backgroundColor:'rgba(30,95,168,0.07)', borderWidth:3, pointRadius:2, tension:0.3, fill:false, order:0 });
     datasets.push({ label:'🇧🇷 Brasil (proj.)', data:vals.map((v,i)=>i<nReal-1?null:v), borderColor:'#1e5fa8', backgroundColor:'transparent', borderWidth:2, pointRadius:2, borderDash:[5,4], tension:0.3, fill:false, order:0 });
   }
@@ -1992,7 +2283,7 @@ function renderHeatmapChart(){
 
     const gdSer = md.series[marca]['GD:'+gd];
     if(gdSer){
-      const vals = getSerVals(gdSer);
+      const vals = getSerVals(gdSer, 'GD:'+gd);
       datasets.push({ label:gd, data:vals.map((v,i)=>i<nReal?v:null), borderColor:gdColor, backgroundColor:'transparent', borderWidth:2.5, pointRadius:2, tension:0.3, fill:false });
       datasets.push({ label:gd+' (proj.)', data:vals.map((v,i)=>i<nReal-1?null:v), borderColor:gdColor, backgroundColor:'transparent', borderWidth:2, pointRadius:2, borderDash:[5,4], tension:0.3, fill:false });
     }
@@ -2006,7 +2297,7 @@ function renderHeatmapChart(){
         if(!repSer) return;
         const repColor = PALETA_REP[repColorIdx % PALETA_REP.length];
         repColorIdx++;
-        const vals = getSerVals(repSer);
+        const vals = getSerVals(repSer, 'REP:'+rep);
         datasets.push({ label:rep, data:vals.map((v,i)=>i<nReal?v:null), borderColor:repColor, backgroundColor:'transparent', borderWidth:1.5, pointRadius:2, tension:0.3, fill:false, borderDash:[4,2] });
         datasets.push({ label:rep+' (proj.)', data:vals.map((v,i)=>i<nReal-1?null:v), borderColor:repColor+'99', backgroundColor:'transparent', borderWidth:1, pointRadius:1, borderDash:[3,4], tension:0.3, fill:false });
       });
@@ -2482,7 +2773,7 @@ function renderAlertRegional(){
       var deltaD3    = Math.round(dosesAtual - dosesAgo3);
       var deltaD6    = Math.round(dosesAtual - dosesAgo6);
       var rankAtual=ser.ranks?ser.ranks[n-1]:null;
-      var fcs=getForecasts(shares);
+      var fcs=fcShare(ser, marcaSerKey, 'REP:'+rep);
       var fcArr = currentCenario==='conservador' ? fcs.cenarios.conservador :
                   currentCenario==='otimista'    ? fcs.cenarios.otimista    :
                   fcs.modelos[currentModelo] || fcs.cenarios.realista;
@@ -2496,7 +2787,7 @@ function renderAlertRegional(){
         var msKey = currentSegmento && md.series[m+'|'+currentSegmento] ? m+'|'+currentSegmento : m;
         var ms=md.series[msKey] ? md.series[msKey]['REP:'+rep] : null;
         if(!ms) return;
-        var mfcs=getForecasts(ms.shares);
+        var mfcs=fcShare(ms, msKey, 'REP:'+rep);
         var mfc = currentCenario==='conservador' ? mfcs.cenarios.conservador :
                   currentCenario==='otimista'    ? mfcs.cenarios.otimista    :
                   mfcs.modelos[currentModelo] || mfcs.cenarios.realista;
@@ -2533,7 +2824,7 @@ function renderAlertRegional(){
         var msKey2 = currentSegmento && md.series[m+'|'+currentSegmento] ? m+'|'+currentSegmento : m;
         var ms=md.series[msKey2] ? md.series[msKey2]['REP:'+rep] : null;
         if(!ms) return;
-        var mfcs=getForecasts(ms.shares);
+        var mfcs=fcShare(ms, msKey2, 'REP:'+rep);
         var mfc=currentCenario==='conservador'?mfcs.cenarios.conservador:currentCenario==='otimista'?mfcs.cenarios.otimista:mfcs.modelos[currentModelo]||mfcs.cenarios.realista;
         if(!otherSharesProj[m]) otherSharesProj[m]=[ms.shares[n-1]];
         for(var t=0;t<HORIZON;t++) otherSharesProj[m].push(mfc[t]);
@@ -2756,7 +3047,7 @@ function updateBreadcrumb(key){
 }
 
 // Helper: share de uma marca para um periodo (real ou projetado)
-function getShareParaPeriodo(shares, periodo, md, modelo, cenario){
+function getShareParaPeriodo(shares, periodo, md, modelo, cenario, _ser, _key, _terr){
   var idx = md.periodos.indexOf(periodo);
   if(idx >= 0) return shares[idx] || 0;
   var allP = getAllPeriodos(md.periodos);
@@ -2764,7 +3055,7 @@ function getShareParaPeriodo(shares, periodo, md, modelo, cenario){
   var nReais  = md.periodos.length;
   var offset  = projIdx - nReais;
   if(offset < 0 || offset >= HORIZON) return shares[shares.length-1] || 0;
-  var fcs = getForecasts(shares);
+  var fcs = (_ser&&_ser.doses)?fcShare(_ser,_key,_terr||currentTerr):getForecasts(shares);
   var arr = cenario==='conservador' ? fcs.cenarios.conservador
            : cenario==='otimista'   ? fcs.cenarios.otimista
            : fcs.modelos[modelo]    || fcs.cenarios.realista;
@@ -2810,9 +3101,9 @@ function renderDetailPanel(key){
   // Share do ultimo mes REAL (sempre ultimo historico)
   const lastReal  = shares[n-1];
   // Share do periodo base selecionado (real ou projetado)
-  const shareBase = getShareParaPeriodo(shares, currentPeriodoBase, md, currentModelo, currentCenario);
+  const shareBase = getShareParaPeriodo(shares, currentPeriodoBase, md, currentModelo, currentCenario, ser, currentMarca, key);
   // Share do periodo anterior selecionado (real ou projetado)
-  const shareAnt  = getShareParaPeriodo(shares, currentPeriodoAnt,  md, currentModelo, currentCenario);
+  const shareAnt  = getShareParaPeriodo(shares, currentPeriodoAnt,  md, currentModelo, currentCenario, ser, currentMarca, key);
   const deltaBase    = parseFloat((shareBase - shareAnt).toFixed(2));
   const deltaBaseCls = deltaBase > 0 ? 'up' : 'down';
   // Doses para Card 1 (modo doses)
@@ -2826,7 +3117,7 @@ function renderDetailPanel(key){
   // Rank projetado para este territorio
   var rankProj = null;
   var rankVarTextDetail = 'Sem projecao de variacao no rank';
-  var fcsDet = getForecasts(shares);
+  var fcsDet = fcShare(ser, currentMarca, key);
   var fcArrDet = currentCenario==='conservador'?fcsDet.cenarios.conservador:currentCenario==='otimista'?fcsDet.cenarios.otimista:fcsDet.modelos[currentModelo]||fcsDet.cenarios.realista;
   var myProjShare = fcArrDet[HORIZON-1];
   var projSharesDet = {};
@@ -2835,7 +3126,7 @@ function renderDetailPanel(key){
     if(m===currentMarca) return;
     var ms = md.series[m][key];
     if(!ms) return;
-    var mfcs = getForecasts(ms.shares);
+    var mfcs = fcShare(ms, m, key);
     var mfc = currentCenario==='conservador'?mfcs.cenarios.conservador:currentCenario==='otimista'?mfcs.cenarios.otimista:mfcs.modelos[currentModelo]||mfcs.cenarios.realista;
     projSharesDet[m] = mfc[HORIZON-1];
   });
@@ -2852,7 +3143,7 @@ function renderDetailPanel(key){
       if(m===currentMarca) return;
       var ms=md.series[m][key];
       if(!ms) return;
-      var mfcs=getForecasts(ms.shares);
+      var mfcs=fcShare(ms, m, key);
       var mfc=currentCenario==='conservador'?mfcs.cenarios.conservador:currentCenario==='otimista'?mfcs.cenarios.otimista:mfcs.modelos[currentModelo]||mfcs.cenarios.realista;
       otherSharesProjDet[m]=[ms.shares[n-1]];
       for(var t2=0;t2<HORIZON;t2++) otherSharesProjDet[m].push(mfc[t2]);
@@ -2907,7 +3198,7 @@ function renderDetailPanel(key){
   const ctxE=document.getElementById('chart-detail-evo');
   if(charts['detail-evo']) charts['detail-evo'].destroy();
   const detailDataSrc = currentMetrica==='doses' ? doses : shares;
-  const fcsDetail = currentMetrica==='doses' ? getForecastsDoses(detailDataSrc) : getForecasts(detailDataSrc);
+  const fcsDetail = currentMetrica==='doses' ? fcDoses(ser, currentMarca, key) : fcShare(ser, currentMarca, key);
   const fcDetail=currentCenario==='conservador'?fcsDetail.cenarios.conservador:currentCenario==='otimista'?fcsDetail.cenarios.otimista:fcsDetail.modelos[currentModelo]||fcsDetail.cenarios.realista;
   const allPersD=getAllPeriodos(md.periodos);
   const projPersD=allPersD.slice(md.periodos.length,md.periodos.length+HORIZON);
@@ -2938,7 +3229,7 @@ function renderDetailPanel(key){
     var cColor=PALETA_CONC_EVO[concIdx%PALETA_CONC_EVO.length];
     concIdx++;
     var cDataSrc = currentMetrica==='doses' ? concSer.doses : concSer.shares;
-    var cFcs = currentMetrica==='doses' ? getForecastsDoses(cDataSrc) : getForecasts(cDataSrc);
+    var cFcs = currentMetrica==='doses' ? fcDoses(concSer, concKey, key) : fcShare(concSer, concKey, key);
     var cFc=currentCenario==='conservador'?cFcs.cenarios.conservador:currentCenario==='otimista'?cFcs.cenarios.otimista:cFcs.modelos[currentModelo]||cFcs.cenarios.realista;
     var cHist=[...cDataSrc,...Array(HORIZON).fill(null)];
     var cProj=[...Array(n_d-1).fill(null),cDataSrc[n_d-1],...cFc];
@@ -3394,7 +3685,7 @@ function renderSetorial(md, periodos, metrica='share'){
     const isExeltis=m===currentMarca;
     const color=isExeltis?PALETA[0]:PALETA[i%PALETA.length];
     const setDataSrc = metrica==='doses' ? ser.doses : ser.shares;
-    const fcsS = metrica==='doses' ? getForecastsDoses(setDataSrc) : getForecasts(setDataSrc);
+    const fcsS = metrica==='doses' ? fcDoses(ser, serKey, currentTerr) : fcShare(ser, serKey, currentTerr);
     const fcS=currentCenario==='conservador'?fcsS.cenarios.conservador:currentCenario==='otimista'?fcsS.cenarios.otimista:fcsS.modelos[currentModelo]||fcsS.cenarios.realista;
     const histS=[...setDataSrc,...Array(HORIZON).fill(null)];
     const projS=[...Array(nS-1).fill(null),setDataSrc[nS-1],...fcS];
@@ -3904,5 +4195,22 @@ document.addEventListener('click', (e) => {
 // START
 window.addEventListener('DOMContentLoaded', init);
 </script>
+
+<!-- MODAL SENHA CURVAS -->
+<div id="modal-curvas" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:14px;padding:32px 36px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.22);font-family:'DM Sans',sans-serif">
+    <div style="font-size:32px;text-align:center;margin-bottom:8px">🔒</div>
+    <div style="font-size:16px;font-weight:700;color:#1e2d3d;text-align:center;margin-bottom:4px">Acesso Restrito</div>
+    <div style="font-size:12px;color:#64748b;text-align:center;margin-bottom:20px">Digite a senha para acessar Curvas & Cenários</div>
+    <input id="curvas-pwd-input" type="password" placeholder="Senha"
+      style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:8px"
+      onkeydown="if(event.key==='Enter')submitCurvasPwd()">
+    <div id="curvas-pwd-erro" style="color:#ef4444;font-size:11px;min-height:16px;margin-bottom:10px;text-align:center"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="fecharModalCurvas()" style="flex:1;padding:8px;background:#f1f5f9;color:#475569;border:none;border-radius:8px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer">Cancelar</button>
+      <button onclick="submitCurvasPwd()" style="flex:1;padding:8px;background:#1e5fa8;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer">Entrar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
