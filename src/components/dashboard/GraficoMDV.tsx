@@ -35,10 +35,6 @@ const config: LineChartCardConfig = {
   labelFormatValue: (v) => v.toFixed(1),
   labelWidth: 34,
   referenceLine: { y: 10.8, label: 'Meta 10.8' },
-  lineColors: [
-    '#10b981', '#3b82f6', '#f97316', '#8b5cf6', '#ef4444', '#06b6d4', '#f59e0b',
-    '#ec4899', '#6366f1', '#14b8a6', '#94a3b8', '#a855f7', '#f43f5e', '#0ea5e9',
-  ],
 };
 
 export function GraficoMDV() {

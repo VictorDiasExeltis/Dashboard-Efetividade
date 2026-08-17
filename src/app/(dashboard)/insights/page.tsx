@@ -8,7 +8,6 @@ import { Card, CardContent } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { useLayout } from '@/src/context/LayoutContext';
 import { InsightsFilters } from '@/src/components/dashboard/InsightsFilters';
-import { InsightsResumoCards } from '@/src/components/dashboard/InsightsResumoCards';
 import { getDesempenhoVisitacao, type SetorDesempenho } from '@/src/app/actions/insights';
 import { getMedicosNaoVisitados } from '@/src/app/actions/medicos';
 import type { MedicoNaoVisitado } from '@/src/app/actions/medicos.types';
@@ -256,9 +255,7 @@ export default function InsightsPage() {
 
   return (
     <div className="p-6">
-      <InsightsResumoCards distrito={distrito} />
-
-      <div className="mt-4">
+      <div>
         <DesempenhoVisitacaoCard lists={desempLists} periodo={periodoDesemp} loading={loadingDesemp} />
       </div>
 

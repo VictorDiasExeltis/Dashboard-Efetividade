@@ -35,10 +35,6 @@ const config: LineChartCardConfig = {
   labelFormatValue: (v) => `${v.toFixed(1)}%`,
   labelWidth: 36,
   referenceLine: { y: 90, label: 'Meta 90%' },
-  lineColors: [
-    '#3b82f6', '#f97316', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#f59e0b',
-    '#ec4899', '#6366f1', '#14b8a6', '#94a3b8', '#a855f7', '#f43f5e', '#0ea5e9',
-  ],
 };
 
 export function GraficoCobertura() {

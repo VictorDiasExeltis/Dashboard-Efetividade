@@ -128,7 +128,12 @@ const _getAmostrasDataCached = cacheLoader(
         WHERE m.status = TRUE
           AND m.classificacao IS NOT NULL AND TRIM(m.classificacao) <> ''
         GROUP BY TRIM(m.classificacao)
-        ORDER BY TRIM(m.classificacao)
+        -- "NÃO CLASSIFICADO" sempre por último (à direita no gráfico); as demais
+        -- seguem alfabéticas. Mesmo critério do gráfico de segmentação ao lado,
+        -- que já joga "SEM SEGMENTAÇÃO" para o fim. O ILIKE com "_" no lugar do
+        -- "Ã" tolera a variante sem acento, caso a origem mude.
+        ORDER BY CASE WHEN TRIM(m.classificacao) ILIKE 'N_O CLASSIFICADO' THEN 1 ELSE 0 END,
+                 TRIM(m.classificacao)
       `),
       // Total real de amostras entregues — soma direta em fato_amostras.
       // Não filtra por status do médico: amostras já entregues a médicos hoje

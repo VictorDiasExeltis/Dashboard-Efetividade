@@ -223,7 +223,7 @@ function BarCompareCard({ title, description, icon: Icon, data, colorRealizado, 
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} angle={-35} textAnchor="end" interval={0} height={60} />
                 <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} />
-                <Tooltip cursor={{ fill: 'rgba(148,163,184,0.08)' }} content={<ChartTooltip suffix={suffix} nameRealizado={nameRealizado} nameMeta={nameMeta} />} />
+                <Tooltip cursor={{ fill: 'rgba(148,163,184,0.08)' }} isAnimationActive={false} content={<ChartTooltip suffix={suffix} nameRealizado={nameRealizado} nameMeta={nameMeta} />} />
                 <Legend verticalAlign="top" content={<CustomChartLegend order={[nameRealizado, nameMeta]} />} />
                 {/* Barras lado a lado. */}
                 <Bar dataKey="Realizado" name={nameRealizado} fill={colorRealizado} radius={[4, 4, 0, 0]} maxBarSize={64}>
@@ -238,7 +238,7 @@ function BarCompareCard({ title, description, icon: Icon, data, colorRealizado, 
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} angle={-35} textAnchor="end" interval={0} height={60} />
                 <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} />
-                <Tooltip content={<ChartTooltip suffix={suffix} nameRealizado={nameRealizado} nameMeta={nameMeta} />} />
+                <Tooltip isAnimationActive={false} content={<ChartTooltip suffix={suffix} nameRealizado={nameRealizado} nameMeta={nameMeta} />} />
                 <Legend verticalAlign="top" content={<CustomChartLegend order={[nameRealizado, nameMeta]} />} />
                 {/* Realizado: linha cheia na cor (esquerda na legenda). */}
                 <Line type="linear" dataKey="Realizado" name={nameRealizado} stroke={colorRealizado} strokeWidth={2.5} dot={{ r: 3, fill: colorRealizado }}>

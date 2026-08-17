@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
+import { buscarCiclosFechados } from '@/src/lib/ciclos-fechados';
 import { Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import {
   Card,
@@ -252,8 +253,16 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
       if (usaFiltroCiclo) {
         query = query.in('dim_calendario.ciclo', ciclosSelecionados);
       } else {
-        // Ignora ciclo "00" (dias não úteis) quando mostrando "Todos"
-        query = query.not('dim_calendario.ciclo', 'like', '%00');
+        // "Todos" = todos os ciclos ENCERRADOS. Tela consolidada não mostra
+        // parcial (mesma regra de Cobertura/MDV/Insights). A view já exclui o
+        // pseudo-ciclo 202600, o que também cobre o antigo filtro "not like %00".
+        const fechados = await buscarCiclosFechados();
+        if (fechados.length === 0) {
+          setDados([]);
+          setLoading(false);
+          return;
+        }
+        query = query.in('dim_calendario.ciclo', fechados);
       }
 
       const { data, error: err } = await query;
@@ -461,7 +470,7 @@ export function GraficoAbonos({ filtroDistrito, filtroSetor, filtroCiclo = 'Todo
                         />
                       ))}
                     </Pie>
-                    <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 50 }} />
+                    <Tooltip content={<CustomTooltip />} isAnimationActive={false} wrapperStyle={{ zIndex: 50 }} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0">

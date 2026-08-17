@@ -18,6 +18,7 @@ import {
   CardDescription,
 } from '@/src/components/ui/card';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
+import { buscarCiclosFechados, normalizarCiclos } from '@/src/lib/ciclos-fechados';
 
 // ─── Constantes ───────────────────────────────────────────────
 
@@ -103,22 +104,27 @@ function extrairCicloAbono(abono: FatoAbonoRaw): string | null {
 
 function processarDados(
   rows: DimHierarquiaRaw[],
-  filtroCiclo: string
+  filtroCiclo: string,
+  ciclosFechados: Set<string>,
 ): RepresentanteProcessado[] {
   // filtroCiclo aceita "Todos", um único ciclo ("202604") ou CSV
   // ("202604,202605") quando o usuário fez Ctrl+clique no header global.
+  //
+  // "Todos" = todos os ciclos ENCERRADOS, nunca o em andamento. Tela
+  // consolidada não mostra parcial (mesma regra de Cobertura/MDV/Insights).
+  // Antes o ramo "Todos" aceitava qualquer ciclo, e o ciclo aberto entraria
+  // aqui assim que `metas_ciclo` ou `fato_abonos` recebessem dado dele.
   const isTodos = !filtroCiclo || filtroCiclo === 'Todos';
   const ciclosFiltro = isTodos
-    ? new Set<string>()
+    ? ciclosFechados
     : new Set(filtroCiclo.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean));
   const matchCiclo = (ciclo: string | null | undefined) =>
-    isTodos || (ciclo != null && ciclosFiltro.has(ciclo.trim().toLowerCase()));
+    ciclo != null && ciclosFiltro.has(ciclo.trim().toLowerCase());
 
   return rows.map((row) => {
-    const metas = (isTodos
-      ? (row.metas_ciclo ?? [])
-      : (row.metas_ciclo ?? []).filter((m) => matchCiclo(m.ciclo))
-    ).filter((m) => m.considerar === true);
+    const metas = (row.metas_ciclo ?? [])
+      .filter((m) => matchCiclo(m.ciclo))
+      .filter((m) => m.considerar === true);
 
     const todosAbonos = row.fato_abonos ?? [];
 
@@ -132,25 +138,18 @@ function processarDados(
       );
     }
 
-    const abonos = isTodos
-      ? todosAbonos
-      : todosAbonos.filter((a) => matchCiclo(extrairCicloAbono(a)));
+    const abonos = todosAbonos.filter((a) => matchCiclo(extrairCicloAbono(a)));
 
     const diasTrabalhados = metas.reduce((acc, m) => acc + (m.dias_trabalhados ?? 0), 0);
     const totalHoras = abonos.reduce((acc, a) => acc + (a.horas_abonadas ?? 0), 0);
     const diasAbonados = Math.round((totalHoras / 8) * 10) / 10;
 
-    let desconsiderado = false;
-    if (!isTodos) {
-      // Desconsidera quando NENHUM dos ciclos selecionados tem meta ativa.
-      const algumaMetaAtiva = (row.metas_ciclo ?? []).some(
-        (m) => matchCiclo(m.ciclo) && m.considerar === true,
-      );
-      if (!algumaMetaAtiva) desconsiderado = true;
-    } else {
-      const temMetasAtivas = (row.metas_ciclo ?? []).some((m) => m.considerar === true);
-      if (!temMetasAtivas) desconsiderado = true;
-    }
+    // Desconsidera quando NENHUM ciclo do recorte tem meta ativa. Com o
+    // matchCiclo agora valendo também para "Todos", os dois ramos antigos
+    // (selecionado / todos) viraram a mesma regra.
+    const desconsiderado = !(row.metas_ciclo ?? []).some(
+      (m) => matchCiclo(m.ciclo) && m.considerar === true,
+    );
 
     return {
       codSetor: row.cod_setor,
@@ -197,6 +196,9 @@ export function TabelaRepresentantes({
   const [pagina, setPagina] = useState(1);
   // Ordenação da coluna "Dias Abonados": null = ordem original (por nome)
   const [ordemAbonados, setOrdemAbonados] = useState<'desc' | 'asc' | null>(null);
+  // Ciclos encerrados (normalizados). Vazio até carregar — e vazio significa
+  // "nenhum ciclo liberado", não "libera tudo".
+  const [ciclosFechados, setCiclosFechados] = useState<Set<string>>(new Set());
 
   // ─── Fetch ────────────────────────────────────────────────
 
@@ -238,6 +240,16 @@ export function TabelaRepresentantes({
     fetchDados();
   }, [fetchDados]);
 
+  // Ciclos encerrados: definem o universo do filtro "Todos" (parcial nunca
+  // aparece). Buscado uma vez — a lista só muda na virada de um ciclo.
+  useEffect(() => {
+    let cancelado = false;
+    buscarCiclosFechados().then((lista) => {
+      if (!cancelado) setCiclosFechados(normalizarCiclos(lista));
+    });
+    return () => { cancelado = true; };
+  }, []);
+
   // Reset da paginação quando o filtro de ciclo muda
   useEffect(() => {
     setPagina(1);
@@ -246,8 +258,8 @@ export function TabelaRepresentantes({
   // ─── Derivações (memoizadas) ──────────────────────────────
 
   const dadosFiltrados = useMemo(
-    () => processarDados(rawDados, filtroCiclo),
-    [rawDados, filtroCiclo]
+    () => processarDados(rawDados, filtroCiclo, ciclosFechados),
+    [rawDados, filtroCiclo, ciclosFechados]
   );
 
   // Aplica ordenação por "Dias Abonados" sem mutar o array original.

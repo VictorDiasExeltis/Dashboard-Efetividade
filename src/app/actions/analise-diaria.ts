@@ -46,21 +46,26 @@ const _getSetoresHierarquiaCached = cacheLoader(
 );
 
 // ---------------------------------------------------------------------------
-// Análise de Ciclo por setor — reconstruída a partir do livro-razão de visitas
-// (fato_visitas), do painel/metas (metas_ciclo), do calendário (dim_calendario)
-// e da hierarquia (dim_hierarquia). Todo o cálculo é feito aqui no servidor.
+// Análise de Ciclo por setor — alimentada pelo RELATÓRIO SIMPLIFICADO
+// (`fato_ciclo_resumo`), mais o calendário (dim_calendario) e a hierarquia
+// (dim_hierarquia). Todo o cálculo é feito aqui no servidor.
 // Divisões por zero → null (a tela mostra "—").
 //
-// Ciclo exibido    = último ciclo com visitas em fato_visitas.
+// Esta tela mostra SEMPRE o ciclo em andamento. Quando o ciclo fecha, ela vira
+// para o próximo; o encerrado passa a viver nas telas consolidadas, com as
+// bases oficiais (fato_visitas / metas_ciclo / fato_abonos). Por isso ela não
+// lê fato_visitas: o resumo chega diariamente, sem depender de dim_medicos.
+//
+// Ciclo exibido    = último ciclo do resumo que ainda não fechou (NULL ⇒ vazio).
 // Modelo:
 //   DU             = dias úteis do ciclo (dim_calendario)
 //   dias_decorridos= dias úteis do ciclo < hoje, i.e. ATÉ ONTEM (defasagem de
 //                    carga: hoje ainda não tem dado). Ciclo já fechado ⇒ = DU.
 //   dias_restantes = max(DU − dias_decorridos, 0)
-//   visitas_real   = nº de visitas do setor no ciclo (COUNT fato_visitas)
-//   dias_trabalhados = nº de dias distintos com visita (COUNT DISTINCT data_visita)
-//   dias_abonados  = 0 (não disponível no livro de visitas)
-//   tamanho_painel = metas_ciclo.tamanho_painel
+//   visitas_real   = fato_ciclo_resumo.visitas
+//   dias_trabalhados = fato_ciclo_resumo.dias_trabalhados (FATO, não inferido)
+//   dias_abonados  = fato_ciclo_resumo.dias_abonados
+//   tamanho_painel = fato_ciclo_resumo.tamanho_painel
 //   meta_pct       = 90% × (DU / 15)
 //   visitas_meta   = round(meta_pct × tamanho_painel)
 //   mdv_atual      = visitas_real / dias_trabalhados              (null se dt=0)
@@ -133,8 +138,12 @@ const _getCicloProgressoCached = cacheLoader(
     if (!db) return vazio;
     const result = await db.execute(sql`
       WITH alvo AS (
-        -- Ciclo exibido = último ciclo com visitas em fato_visitas (alinha com a tabela).
-        SELECT MAX(ciclo) AS ciclo FROM fato_visitas
+        -- Mesma regra da tabela (getAnaliseDiaria): último ciclo do resumo que
+        -- ainda não fechou. Tem que ser idêntica, senão o cabeçalho de progresso
+        -- e a tabela abaixo dele podem apontar para ciclos diferentes.
+        SELECT MAX(ciclo) AS ciclo
+        FROM fato_ciclo_resumo
+        WHERE ciclo NOT IN (SELECT ciclo FROM ciclos_fechados)
       )
       SELECT
         a.ciclo,
@@ -175,8 +184,13 @@ const _getAnaliseDiariaCached = cacheLoader(
     if (!db) return [];
     const result = await db.execute(sql`
       WITH ciclo_alvo AS (
-        -- Ciclo exibido = último ciclo com visitas carregadas em fato_visitas.
-        SELECT MAX(ciclo) AS ciclo FROM fato_visitas
+        -- Ciclo exibido = último ciclo do resumo que AINDA NÃO FECHOU.
+        -- Se o último já fechou, isto devolve NULL, nenhuma linha casa e a tela
+        -- cai no estado vazio — de propósito: ciclo encerrado se vê nas telas
+        -- consolidadas (com as bases oficiais), não aqui.
+        SELECT MAX(ciclo) AS ciclo
+        FROM fato_ciclo_resumo
+        WHERE ciclo NOT IN (SELECT ciclo FROM ciclos_fechados)
       ),
       cal AS (
         -- Dias úteis do ciclo e quantos já decorreram ATÉ ONTEM (calendário).
@@ -191,32 +205,36 @@ const _getAnaliseDiariaCached = cacheLoader(
         FROM dim_calendario
         WHERE ciclo = (SELECT ciclo FROM ciclo_alvo)
       ),
-      visitas AS (
-        -- Livro-razão do ciclo: contagem de visitas e dias distintos com visita.
+      resumo AS (
+        -- Relatório simplificado do ciclo em andamento. Substitui a derivação a
+        -- partir de fato_visitas + metas_ciclo: traz dias trabalhados e abonados
+        -- como FATO (a contagem por visita não distinguia folga de dia sem
+        -- lançamento) e não depende de dim_medicos, o que tornava a carga diária
+        -- refém do cadastro de médico estar em dia.
         SELECT
           cod_setor,
-          COUNT(*)::int                    AS visitas_realizadas,
-          COUNT(DISTINCT data_visita)::int AS dias_trabalhados
-        FROM fato_visitas
+          visitas          AS visitas_realizadas,
+          dias_trabalhados,
+          dias_abonados,
+          tamanho_painel
+        FROM fato_ciclo_resumo
         WHERE ciclo = (SELECT ciclo FROM ciclo_alvo)
-        GROUP BY cod_setor
+          AND considerar          -- setor fora do consolidado não é avaliado
       )
       SELECT
-        v.cod_setor,
+        r.cod_setor,
         dh.nome_setor,
         dh.nome_distrito,
         dh.nome_rep,
-        v.visitas_realizadas,
-        v.dias_trabalhados,
-        mc.tamanho_painel               AS tamanho_painel,
+        r.visitas_realizadas,
+        r.dias_trabalhados,
+        r.dias_abonados,
+        r.tamanho_painel,
         (SELECT ciclo FROM ciclo_alvo)  AS ciclo,
         cal.dias_uteis,
         cal.dias_decorridos
-      FROM visitas v
-      JOIN dim_hierarquia dh ON dh.cod_setor = v.cod_setor
-      LEFT JOIN metas_ciclo mc
-        ON mc.cod_setor = v.cod_setor
-       AND mc.ciclo = (SELECT ciclo FROM ciclo_alvo)
+      FROM resumo r
+      JOIN dim_hierarquia dh ON dh.cod_setor = r.cod_setor
       CROSS JOIN cal
       ORDER BY dh.nome_distrito, dh.nome_setor
     `);
@@ -224,7 +242,7 @@ const _getAnaliseDiariaCached = cacheLoader(
     return result.map((r: any) => {
       const dias_uteis         = Number(r.dias_uteis) || 0;
       const dias_trabalhados   = Number(r.dias_trabalhados) || 0;
-      const dias_abonados      = 0; // livro de visitas não tem abono
+      const dias_abonados      = Number(r.dias_abonados) || 0;
       const visitas_realizadas = Number(r.visitas_realizadas) || 0;
       const painel_raw         = r.tamanho_painel == null ? null : Number(r.tamanho_painel);
       // Ajuste interno: painel acima de 190 é travado em 180 para o cálculo.

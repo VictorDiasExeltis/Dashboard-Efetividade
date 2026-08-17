@@ -1,4 +1,4 @@
-// Espelho do schema `public` no Supabase, sincronizado em 2026-07-23 a partir do
+// Espelho do schema `public` no Supabase, sincronizado em 2026-08-17 a partir do
 // banco real (information_schema + pg_constraint), não das migrations em ./drizzle.
 // As migrations estão defasadas: descrevem uma `fato_diario` que não existe mais,
 // colunas de endereço que nunca foram aplicadas e nenhuma das FKs abaixo.
@@ -19,6 +19,7 @@ import {
   index,
   unique,
   check,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -101,13 +102,20 @@ export const fato_visitas = pgTable(
 );
 
 // PK no banco chama-se `amostras_pkey` (nome legado, tabela renomeada depois).
-export const fato_amostras = pgTable('fato_amostras', {
-  id_amostra: uuid('id_amostra').primaryKey().defaultRandom(),
-  id_visita:  text('id_visita').notNull()
-    .references(() => fato_visitas.id_visita, { onDelete: 'cascade' }),
-  id_produto: integer('id_produto').notNull().references(() => dim_produtos.id_produto),
-  quantidade: integer('quantidade').default(1),
-});
+export const fato_amostras = pgTable(
+  'fato_amostras',
+  {
+    id_amostra: uuid('id_amostra').primaryKey().defaultRandom(),
+    id_visita:  text('id_visita').notNull()
+      .references(() => fato_visitas.id_visita, { onDelete: 'cascade' }),
+    id_produto: integer('id_produto').notNull().references(() => dim_produtos.id_produto),
+    quantidade: integer('quantidade').default(1),
+  },
+  // Índice da coluna da FK: sem ele, todo DELETE em fato_visitas varria as ~270k
+  // amostras por linha apagada (um DELETE de 4.199 visitas estourou o timeout).
+  // Também serve aos JOINs de amostras × visitas da Alocação de Recursos.
+  (t) => [index('idx_fato_amostras_id_visita').on(t.id_visita)],
+);
 
 export const fato_abonos = pgTable('fato_abonos', {
   id_abono:       uuid('id_abono').primaryKey().defaultRandom(),
@@ -170,4 +178,38 @@ export const log_cargas = pgTable(
     criado_em:          timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('idx_log_cargas_criado_em').on(t.criado_em.desc())],
+);
+
+// ---------------------------------------------------------------------------
+// Resumo do ciclo em andamento
+// ---------------------------------------------------------------------------
+
+// Alimenta EXCLUSIVAMENTE a Análise de Ciclo, a partir do relatório
+// simplificado por setor. A tela mostra sempre o ciclo aberto; quando ele fecha,
+// ela vira para o próximo e o encerrado passa a viver nas telas consolidadas,
+// com as bases oficiais (fato_visitas / metas_ciclo / fato_abonos).
+//
+// Existe porque carregar as 3 bases detalhadas todo dia é inviável: dependem de
+// dim_medicos estar em dia (uma carga travou por 3 CRMs ausentes). Este resumo é
+// por setor, sem FK para médico.
+//
+// `dias_abonados` diverge de fato_abonos de propósito — alguns motivos são
+// removidos manualmente do relatório oficial, e é regra de negócio.
+// A coluna `mdv` do arquivo não é importada: é calculada e vem com #DIV/0!.
+export const fato_ciclo_resumo = pgTable(
+  'fato_ciclo_resumo',
+  {
+    cod_setor:        integer('cod_setor').notNull()
+      .references(() => dim_hierarquia.cod_setor, { onUpdate: 'cascade' }),
+    ciclo:            varchar('ciclo', { length: 10 }).notNull(),
+    // fracionários: o relatório traz 14,5 / 14,25 quando o abono é de meio período
+    dias_trabalhados: numeric('dias_trabalhados', { precision: 6, scale: 2 }),
+    dias_abonados:    numeric('dias_abonados', { precision: 6, scale: 2 }),
+    tamanho_painel:   integer('tamanho_painel'),
+    visitas:          integer('visitas'),
+    considerar:       boolean('considerar').notNull().default(true),
+    atualizado_em:    timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // Chave natural: um registro por setor por ciclo. A carga substitui o ciclo.
+  (t) => [primaryKey({ columns: [t.cod_setor, t.ciclo] })],
 );

@@ -17,6 +17,7 @@ import {
   LabelList,
 } from 'recharts';
 import { getSupabaseClient } from '@/src/lib/supabase/client';
+import { corDaEstrutura } from '@/src/lib/charts/cores-estrutura';
 import { AlertTriangle, Loader2, Info, type LucideIcon } from 'lucide-react';
 import {
   Card,
@@ -73,6 +74,38 @@ function CustomChartLegend({ payload, highlighted, onToggle }: any) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Tooltip do gráfico de barras (ciclo único). Depende de `shared={false}` no
+// <Tooltip>: com isso o Recharts entrega no payload APENAS a barra sob o cursor
+// (em vez de todas as séries do eixo X) e posiciona o card na própria barra,
+// já com flip automático perto das bordas. Não mexer no `shared` sem revisar
+// isto — sem ele o payload volta a trazer todos os distritos empilhados.
+function CustomBarTooltip({ active, payload, label, formatValue }: any) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  if (!item) return null;
+  return (
+    <div
+      className="px-3 py-2 text-xs shadow-sm"
+      style={{
+        borderRadius: '8px',
+        backgroundColor: CHART_COLORS.tooltip.bg,
+        border: `1px solid ${CHART_COLORS.tooltip.border}`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <div className="font-semibold text-slate-500 mb-1">{label}</div>
+      <div className="flex items-center gap-1.5">
+        <span
+          className="w-2 h-2 rounded-full inline-block shrink-0"
+          style={{ backgroundColor: item.color ?? item.fill }}
+        />
+        <span className="text-slate-600">{item.name}</span>
+        <span className="font-bold text-slate-900">{formatValue(Number(item.value))}</span>
+      </div>
     </div>
   );
 }
@@ -144,7 +177,8 @@ export type LineChartCardConfig = {
   labelFormatValue: (v: number) => string;
   labelWidth: number;
   referenceLine: { y: number; label: string };
-  lineColors: string[];
+  // Cores não ficam mais aqui: vêm de `corDaEstrutura`, compartilhada com o
+  // gráfico de Cobertura × MDV para a cor bater nos três.
 };
 
 export function LineChartCard({ config }: { config: LineChartCardConfig }) {
@@ -379,13 +413,18 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                     tickFormatter={config.yTickFormatter}
                   />
                   <Tooltip
-                    contentStyle={{
-                      borderRadius: '8px',
-                      backgroundColor: CHART_COLORS.tooltip.bg,
-                      border: `1px solid ${CHART_COLORS.tooltip.border}`,
-                    }}
-                    itemSorter={(item) => -(item.value as number)}
-                    formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
+                    // shared={false} = tooltip por item: payload só da barra
+                    // apontada e posição na própria barra (o Recharts usa o
+                    // `tooltipPosition` do retângulo). Substituiu um cálculo
+                    // manual de posição que às vezes caía em {0,0} e prendia o
+                    // card no canto superior esquerdo.
+                    shared={false}
+                    // O wrapper do Tooltip anima a posição por 400ms (default
+                    // isAnimationActive: 'auto'). Na primeira aparição ele parte
+                    // da origem do gráfico e "viaja" até a barra. Aqui o card
+                    // deve simplesmente aparecer onde está o cursor.
+                    isAnimationActive={false}
+                    content={<CustomBarTooltip formatValue={config.tooltipFormatter} />}
                     cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
                   />
                   <Legend content={<CustomChartLegend highlighted={highlighted} onToggle={toggleSeries} />} verticalAlign="top" />
@@ -402,8 +441,10 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                       fontWeight: 600,
                     }}
                   />
-                  {series.map((label, index) => {
-                    const color = config.lineColors[index % config.lineColors.length];
+                  {series.map((label) => {
+                    // Cor vem da estrutura, não do índice — mantém o mesmo
+                    // distrito/setor com a mesma cor nos 3 gráficos da tela.
+                    const color = corDaEstrutura(label);
                     return (
                       <Bar
                         key={label}
@@ -454,6 +495,7 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                     }}
                     itemSorter={(item) => -(item.value as number)}
                     formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
+                    isAnimationActive={false}
                   />
                   <Legend content={<CustomChartLegend highlighted={highlighted} onToggle={toggleSeries} />} verticalAlign="top" />
                   <ReferenceLine
@@ -469,8 +511,10 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                       fontWeight: 600,
                     }}
                   />
-                  {series.map((label, index) => {
-                    const color = config.lineColors[index % config.lineColors.length];
+                  {series.map((label) => {
+                    // Cor vem da estrutura, não do índice — mantém o mesmo
+                    // distrito/setor com a mesma cor nos 3 gráficos da tela.
+                    const color = corDaEstrutura(label);
                     return (
                       <Line
                         key={label}

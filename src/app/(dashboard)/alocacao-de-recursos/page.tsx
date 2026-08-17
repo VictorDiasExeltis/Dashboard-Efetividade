@@ -370,6 +370,7 @@ function AlocacaoDeRecursosContent() {
                       domain={[0, 'auto']}
                     />
                     <Tooltip
+                      isAnimationActive={false}
                       contentStyle={{
                         borderRadius: '10px',
                         backgroundColor: CHART.tooltip.bg,
@@ -470,6 +471,7 @@ function AlocacaoDeRecursosContent() {
                       domain={[0, 'auto']}
                     />
                     <Tooltip
+                      isAnimationActive={false}
                       contentStyle={{
                         borderRadius: '10px',
                         backgroundColor: CHART.tooltip.bg,

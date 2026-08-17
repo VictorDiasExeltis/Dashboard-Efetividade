@@ -11,6 +11,7 @@ import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/src/components/ui/card';
 import { getDesempenhoVisitacao, type SetorDesempenho } from '@/src/app/actions/insights';
+import { corDaEstrutura } from '@/src/lib/charts/cores-estrutura';
 
 type Gran = 'setor' | 'distrito';
 
@@ -25,22 +26,15 @@ interface Ponto {
 // Meta fixa de MDV (mesma referência do gráfico de MDV da tela).
 const META_MDV = 10.8;
 
+// A cor do ponto passou a ser a da ESTRUTURA (ver `corDaEstrutura`), para bater
+// com os gráficos de Cobertura e MDV. As cores de quadrante (verde/âmbar/rosa)
+// foram removidas: sinalizar meta por cor conflitava com identificar estrutura
+// por cor. O quadrante segue visível pela posição frente às linhas de meta.
 const COR = {
-  bom:   '#059669',  // acima da meta em cobertura E MDV
-  ruim:  '#e11d48',  // abaixo da meta nos dois
-  misto: '#d97706',  // um acima, outro abaixo
   grid:  '#f1f5f9',
   tick:  '#64748b',
   meta:  '#ef4444',  // linhas de meta (mesmo vermelho dos gráficos de linha)
 };
-
-function quadranteCor(p: Ponto, metaCob: number, metaMdv: number): string {
-  const cobOk = p.x >= metaCob;
-  const mdvOk = p.y >= metaMdv;
-  if (cobOk && mdvOk) return COR.bom;
-  if (!cobOk && !mdvOk) return COR.ruim;
-  return COR.misto;
-}
 
 function CustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
@@ -58,13 +52,35 @@ function CustomTooltip({ active, payload }: any) {
   );
 }
 
-// Legenda em pílulas, no mesmo formato dos gráficos de linha da tela.
-function LegendaPill({ cor, children }: { cor: string; children: React.ReactNode }) {
+// Legenda em pílulas clicáveis, no mesmo formato (e mesmas classes de estado)
+// dos gráficos de Cobertura e MDV: clicar realça a estrutura no gráfico.
+function LegendaPill({
+  cor,
+  ativo,
+  onClick,
+  children,
+}: {
+  cor: string;
+  ativo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-600 shadow-sm">
-      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: cor }} />
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-bold transition-all shadow-sm cursor-pointer ${
+        ativo
+          ? 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          : 'border-slate-100 bg-white text-slate-300 opacity-50 hover:opacity-80'
+      }`}
+    >
+      <span
+        className="w-2 h-2 rounded-full inline-block shrink-0 transition-opacity"
+        style={{ backgroundColor: cor, opacity: ativo ? 1 : 0.35 }}
+      />
       {children}
-    </span>
+    </button>
   );
 }
 
@@ -82,6 +98,19 @@ export function CoberturaMdvScatter() {
   const [rows, setRows] = useState<SetorDesempenho[]>([]);
   const [metaCob, setMetaCob] = useState<number>(90);
   const [loading, setLoading] = useState(true);
+
+  // Realce por estrutura (mesma mecânica do LineChartCard): conjunto vazio =
+  // todas em destaque; com seleção, só as escolhidas ficam opacas.
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
+  const toggleEstrutura = (nome: string) => {
+    setHighlighted((prev) => {
+      const next = new Set(prev);
+      if (next.has(nome)) next.delete(nome);
+      else next.add(nome);
+      return next;
+    });
+  };
+  const isActive = (nome: string) => highlighted.size === 0 || highlighted.has(nome);
 
   // Granularidade dos pontos segue a Estrutura da tela: Setor → um ponto por
   // setor; Distrito/Brasil → um ponto por distrito.
@@ -151,11 +180,20 @@ export function CoberturaMdvScatter() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Legenda em pílulas (formato dos demais gráficos) */}
+        {/* Legenda por ESTRUTURA — mesma cor e mesmo formato de pílula dos
+            gráficos de Cobertura e MDV. O desempenho contra a meta continua
+            legível pela posição do ponto em relação às linhas tracejadas. */}
         <div className="flex flex-wrap justify-center gap-2 pb-4 select-none">
-          <LegendaPill cor={COR.bom}>Cobertura e MDV acima da meta</LegendaPill>
-          <LegendaPill cor={COR.misto}>Um acima, outro abaixo</LegendaPill>
-          <LegendaPill cor={COR.ruim}>Ambos abaixo da meta</LegendaPill>
+          {pontos.map((p) => (
+            <LegendaPill
+              key={p.nome}
+              cor={corDaEstrutura(p.nome)}
+              ativo={isActive(p.nome)}
+              onClick={() => toggleEstrutura(p.nome)}
+            >
+              {p.nome}
+            </LegendaPill>
+          ))}
         </div>
 
         <div className="h-[400px] w-full">
@@ -184,9 +222,25 @@ export function CoberturaMdvScatter() {
                   label={{ value: `Meta ${metaCob.toFixed(0)}%`, position: 'top', fill: COR.meta, fontSize: 11, fontWeight: 600 }} />
                 <ReferenceLine y={META_MDV} stroke={COR.meta} strokeDasharray="5 5" strokeWidth={1.5}
                   label={{ value: `Meta ${META_MDV.toFixed(1)}`, position: 'right', fill: COR.meta, fontSize: 11, fontWeight: 600 }} />
-                <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-                <Scatter data={pontos} fillOpacity={0.78}>
-                  {pontos.map((p, i) => <Cell key={i} fill={quadranteCor(p, metaCob, META_MDV)} />)}
+                {/* isAnimationActive={false}: o wrapper do Tooltip anima a
+                    posição por 400ms (default 'auto') e o card "viaja" da origem
+                    do gráfico até o ponto. Mesmo ajuste feito nos gráficos de
+                    Cobertura e MDV. */}
+                <Tooltip
+                  content={<CustomTooltip />}
+                  isAnimationActive={false}
+                  cursor={{ strokeDasharray: '3 3' }}
+                />
+                {/* fillOpacity por Cell: o ponto não selecionado esmaece em vez
+                    de desaparecer, para não perder a noção da nuvem. */}
+                <Scatter data={pontos}>
+                  {pontos.map((p, i) => (
+                    <Cell
+                      key={i}
+                      fill={corDaEstrutura(p.nome)}
+                      fillOpacity={isActive(p.nome) ? 0.78 : 0.12}
+                    />
+                  ))}
                 </Scatter>
               </ScatterChart>
             </ResponsiveContainer>

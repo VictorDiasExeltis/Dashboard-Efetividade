@@ -109,6 +109,21 @@ const _getVisitadosPorPotencialCached = cacheLoader(
       ? sql`AND v.ciclo IN (${sql.join(cicloList.map((c) => sql`${c}`), sql`, `)})`
       : sql``;
 
+    // Alias próprio para o EXISTS que amplia a base (ver getSegmentacaoData).
+    const visitadoNoCiclo = sql`EXISTS (
+      SELECT 1 FROM fato_visitas_fechado fv
+      WHERE fv.crmuf = m.crmuf
+        ${hasTerritorio ? sql`AND fv.cod_setor IN (
+          SELECT h.cod_setor FROM dim_hierarquia h
+          WHERE TRUE
+            ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
+            ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}
+        )` : sql``}
+        ${ciclo !== 'Todos' && cicloList.length > 0
+          ? sql`AND fv.ciclo IN (${sql.join(cicloList.map((c) => sql`${c}`), sql`, `)})`
+          : sql``}
+    )`;
+
     const result = await db.execute(sql`
       SELECT
         m.potencial,
@@ -116,9 +131,12 @@ const _getVisitadosPorPotencialCached = cacheLoader(
         COUNT(DISTINCT v.crmuf)::integer AS visitados
       FROM dim_medicos m
       ${territorioMedicoJoin}
-      LEFT JOIN fato_visitas v
+      LEFT JOIN fato_visitas_fechado v
         ON v.crmuf = m.crmuf ${territorioVisitaWhere} ${cicloWhere}
-      WHERE m.status = TRUE
+      -- Mesma base da tabela de segmentação: ativo hoje OU visitado no ciclo.
+      -- Potencial 0 (não classificado) segue fora por decisão do negócio — o
+      -- foco da tela é segmentação, e os cards cobrem só as faixas 1..5.
+      WHERE (m.status = TRUE OR ${visitadoNoCiclo})
         AND m.potencial BETWEEN 1 AND 5
         ${classificacaoWhere}
       GROUP BY m.potencial
@@ -140,6 +158,21 @@ const _getVisitadosPorPotencialCached = cacheLoader(
   1800,
 );
 
+// Distribuição do painel por segmentação da marca, com quantos médicos de cada
+// bucket receberam ao menos uma visita no ciclo. Lê `fato_visitas_fechado` — só
+// ciclo encerrado, igual às demais telas consolidadas.
+//
+// Base = médico ativo hoje OU médico visitado no ciclo selecionado, mesmo que
+// já tenha saído do painel (regra: visita realizada sempre conta). Logo o total
+// varia por ciclo — 15.655 no 202609, contra 15.627 de painel ativo.
+//
+// ATENÇÃO — não bate com a Cobertura da Visão Executiva, e é esperado:
+// aqui a unidade é MÉDICO; lá é VISITA sobre `metas_ciclo.tamanho_painel`
+// (painel vigente no ciclo). No ciclo 202609: 12.591/15.655 (80,4%) aqui
+// contra 12.641/14.952 (84,5%) lá. A diferença de numerador são as 50
+// revisitas (visita ≠ médico); a de denominador é painel atual vs do ciclo.
+// Como `metas_ciclo` não tem dimensão de segmentação, o painel do ciclo não
+// pode ser rateado por bucket — por isso esta tela usa a base de médicos.
 export async function getSegmentacaoData(
   marcaId: number,
   classificacao: string = 'Todas',
@@ -203,6 +236,22 @@ const _getSegmentacaoDataCached = cacheLoader(
       ? sql`AND m.potencial IN (${sql.join(potencialList.map((p) => sql`${Number(p)}`), sql`, `)})`
       : sql``;
 
+    // Mesmos filtros de visita do LEFT JOIN, mas com alias próprio para o
+    // EXISTS que amplia a base (não dá para reusar os de alias `v`).
+    const visitadoNoCiclo = sql`EXISTS (
+      SELECT 1 FROM fato_visitas_fechado fv
+      WHERE fv.crmuf = m.crmuf
+        ${hasTerritorio ? sql`AND fv.cod_setor IN (
+          SELECT h.cod_setor FROM dim_hierarquia h
+          WHERE TRUE
+            ${distrito !== 'Todos' ? sql`AND h.nome_distrito = ${distrito}` : sql``}
+            ${setor   !== 'Todos' ? sql`AND h.nome_setor    = ${setor}`    : sql``}
+        )` : sql``}
+        ${ciclo !== 'Todos' && cicloList.length > 0
+          ? sql`AND fv.ciclo IN (${sql.join(cicloList.map((c) => sql`${c}`), sql`, `)})`
+          : sql``}
+    )`;
+
     const resultRaw = await db.execute(sql`
       SELECT
         COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO') as label,
@@ -211,8 +260,12 @@ const _getSegmentacaoDataCached = cacheLoader(
       FROM dim_medicos m
       ${territorioMedicoJoin}
       LEFT JOIN fato_segmentacao s ON s.crmuf = m.crmuf AND s.id_marca = ${marcaId}
-      LEFT JOIN fato_visitas v ON v.crmuf = m.crmuf ${territorioJoin} ${cicloWhere}
-      WHERE m.status = TRUE
+      LEFT JOIN fato_visitas_fechado v ON v.crmuf = m.crmuf ${territorioJoin} ${cicloWhere}
+      -- Base = ativo hoje OU visitado no ciclo (mesmo já fora do painel).
+      -- Visita realizada conta sempre; inativar o médico depois não apaga o
+      -- trabalho feito. Como o inativo só entra se foi visitado, ele nunca cai
+      -- em "não visitados" — essa coluna segue sendo só painel ativo.
+      WHERE (m.status = TRUE OR ${visitadoNoCiclo})
         ${classificacaoWhere}
         ${potencialWhere}
       GROUP BY COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
