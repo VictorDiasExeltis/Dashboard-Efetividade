@@ -484,9 +484,14 @@ export default function AnaliseDiaria() {
                 <th className="px-4 py-3 font-medium text-center">
                   <SortHeader label="Projeção" myKey="projecao" sortKey={sortKey} sortDir={sortDir} onClick={handleSort} />
                 </th>
+                {/* Coluna "Indicativo" oculta temporariamente — regra de
+                    classificação em validação. Para reativar, descomentar aqui
+                    e o par correspondente no corpo da tabela. */}
+                {/*
                 <th className="px-4 py-3 font-medium text-center">
                   <SortHeader label="Indicativo" myKey="status" sortKey={sortKey} sortDir={sortDir} onClick={handleSort} />
                 </th>
+                */}
               </tr>
             </thead>
             <tbody>
@@ -500,7 +505,7 @@ export default function AnaliseDiaria() {
                 ))
               ) : tableRows.length === 0 ? (
                 <tr className="bg-white">
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                     Nenhum dado para os filtros selecionados.
                   </td>
                 </tr>
@@ -539,12 +544,15 @@ export default function AnaliseDiaria() {
                         <span className="text-slate-400"> / {fmt1(r.mdvNecessaria)}</span>
                       </td>
                       <td className="px-4 py-3 text-center font-semibold text-slate-900">{fmtInt(r.projecao)}</td>
+                      {/* Célula "Indicativo" oculta — ver cabeçalho. */}
+                      {/*
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${meta.bg} ${meta.cor}`} title={meta.texto}>
                           <StatusIcon className="h-3.5 w-3.5" />
                           {meta.label}
                         </span>
                       </td>
+                      */}
                     </tr>
                   );
                 })
