@@ -42,6 +42,166 @@ das duas.
 
 ---
 
+## 3. Revisão dos ícones de ajuda ("?") nos cards
+
+**Telas:** Visão Executiva, Alocação de Recursos, Visitação × Segmentação,
+Target List e os gráficos de Cobertura/MDV.
+
+Os cards têm um ícone de ajuda que abre um texto explicando a métrica. Revisar
+esses textos: se estão corretos, se estão claros para quem não é da área e se
+estão padronizados entre as telas.
+
+Alguns exemplos do que existe hoje:
+
+- *"Porcentagem de médicos visitados em relação ao número de médicos do painel."*
+- *"Média de visitas por dia útil trabalhado no período selecionado."*
+- *"Quantidade média de amostras entregues por médico (Total de Amostras / nº de
+  médicos distintos que receberam amostra, conforme o filtro)."*
+
+**Pontos de atenção já identificados:**
+- O texto da Cobertura fala em "médicos visitados", mas na Visão Executiva o
+  cálculo conta **visitas**, não médicos distintos. O texto descreve a régua da
+  tela de Segmentação, não a da própria tela.
+- "Média de visitas por dia útil trabalhado" — o divisor são os dias
+  **trabalhados**, que não é o mesmo que dias úteis do ciclo.
+- Uns textos citam a fórmula entre parênteses, outros não. Vale escolher um
+  padrão.
+
+Referência: a `Régua dos Indicadores` (documento de 18/08) tem a descrição
+conferida de cada métrica.
+
+---
+
+## 4. Revisar os cálculos
+
+Revisão geral das fórmulas por trás dos indicadores — confirmar com a área de
+negócio se cada uma responde à pergunta certa.
+
+**Já mapeado e aguardando validação:**
+- **Duas réguas de cobertura.** Visão Executiva conta visitas sobre o painel do
+  ciclo; Visitação × Segmentação conta médicos sobre o painel de hoje. Ciclo 09
+  dá 84,5% e 80,4%. Ambas corretas, mas confirmar se as duas devem existir.
+- **MDV divide por dias trabalhados**, então faltar melhora o indicador.
+  Confirmar se é o comportamento desejado.
+- **Regra de classificação do "Indicativo"** (manter / atenção / ação) — o corte
+  é 10% acima da MDV necessária. A coluna está oculta desde 18/08 justamente
+  para essa validação.
+- **Meta de 90% ajustada por dias úteis** (`90% × DU ÷ 15`).
+- **Painel travado em 180** quando passa de 190 — hoje nunca dispara, mas a
+  regra está no código.
+- **Insights ignora o ciclo 01** por ser atípico.
+
+---
+
+## 5. Target List não desconsidera setores "não considerar" — ✅ APLICADO 18/08
+
+**Tela:** Médicos não Visitados (`/target-list`)
+
+**Verificado em 18/08: ela NÃO filtra.** A consulta usa `metas_ciclo` apenas
+para descobrir quais são os 3 ciclos mais recentes; não há nenhuma condição de
+`considerar` no filtro. Médicos de setor marcado como não considerar entram na
+lista normalmente.
+
+**Impacto medido** (janela 202607–202609):
+
+| | |
+|---|---:|
+| Médicos na lista | 457 |
+| Vindos de setor "não considerar" | **179 (39%)** |
+
+Os 5 setores envolvidos:
+
+| Setor | Representante | Na lista | `considerar` por ciclo (07/08/09) |
+|---|---|---:|---|
+| RO_PORTOVELHO | Mary Anny Alexandre | 69 | sim / não / não |
+| SPC_ZONALESTE | Aleksandra Furtado | 55 | não / não / sim |
+| PR_CTBA_1 | Andrew Andrade Vaz | 33 | não / não / sim |
+| RS_CAXIAS | Jenice Biegelmeyer | 20 | sim / não / não |
+| SC_FLORIPA_BC | Raphael Carvalho | 2 | sim / sim / não |
+
+**Decisão tomada (18/08):** passa a filtrar, pelo critério de **maioria** — o
+setor sai se estiver "não considerar" na maior parte dos ciclos da janela.
+Aplicado tanto na lista quanto no total de ativos exibido ao lado, para os dois
+falarem da mesma base. Resultado: a lista foi de **457 para 280 médicos**,
+saindo PR_CTBA_1, RO_PORTOVELHO, RS_CAXIAS e SPC_ZONALESTE. O SC_FLORIPA_BC
+continua, por ter 2 ciclos "sim" contra 1 "não".
+
+**Ainda em aberto:**
+- **O `considerar` varia entre os ciclos da janela.** Nenhum dos 5 setores é
+  "não considerar" nos três. Então a regra precisa definir: exclui se estiver
+  fora em **algum** ciclo, na **maioria**, ou só no **mais recente**? A escolha
+  muda bastante o resultado — pelo critério "algum ciclo" saem 179 médicos;
+  pelo "mais recente" sairiam bem menos.
+- Vale conferir também se o mesmo vale para outras telas que listam médicos.
+
+---
+
+## 6. Revisar as regras de negócio com a gerência
+
+Várias regras hoje estão implementadas por decisão técnica ou por combinação
+pontual, sem validação formal com a gerência. Elas mudam número em tela, então
+vale uma rodada de aprovação antes de virarem referência oficial.
+
+**Regras a validar:**
+
+| Regra | Como está hoje | Pergunta |
+|---|---|---|
+| Setor "não considerar" na Target List | sai pela **maioria** dos 3 ciclos (18/08) | maioria é o corte certo, ou deveria ser o ciclo mais recente? |
+| Duas réguas de cobertura | Visão Executiva por visita/painel do ciclo; Segmentação por médico/painel de hoje | as duas devem coexistir? qual é a oficial? |
+| MDV | divide por dias trabalhados | faltar melhora o indicador — é o desejado? |
+| Indicativo (manter/atenção/ação) | corte em 10% acima da MDV necessária | o corte é esse? a coluna está oculta desde 18/08 aguardando isso |
+| Meta de cobertura | 90% ajustado por dias úteis (`90% × DU ÷ 15`) | confirmar a base de 90% e o ajuste proporcional |
+| Painel ideal | reduzido na origem (~180), com teto de 190 no código | confirmar o teto e quem define o painel ideal |
+| Ciclo 01 nos Insights | excluído por ser atípico | manter a exclusão? vale para o próximo ano? |
+| Potencial 0 | fora dos cards de potencial (448 médicos) | manter fora, ou criar card "não classificado"? |
+| Janela da Target List | 3 ciclos sem visita | 3 é o certo para caracterizar abandono? |
+
+**Sugestão:** levar a `Régua dos Indicadores` (documento de 18/08) para a
+reunião — ela tem cada fórmula descrita em linguagem de negócio, o que evita
+discutir código.
+
+---
+
+## 7. Senha individual para cada usuário
+
+**Tela:** Login (`/login`) e uma tela nova de conta/perfil.
+
+Hoje todos os usuários entram com a **mesma senha** (`@Exeltis123`), definida na
+liberação de 18/08. E não há como trocá-la: a tela de login está com
+`showLinks={false}`, que remove "Esqueci a senha" e "Cadastre-se", e não existe
+tela de perfil no sistema. Só o administrador troca, pelo painel do Supabase,
+uma conta por vez.
+
+**Consequências:**
+- A senha compartilhada fica na caixa de entrada de todos, indefinidamente.
+- Sem responsabilização individual: o registro de acesso não distingue quem foi.
+- Quando alguém sair da empresa, é preciso trocar a senha de **todos**.
+- Combina mal com o fato de qualquer usuário logado enxergar o painel completo
+  de médicos (nome, CRM, endereço).
+
+**Dois caminhos, e um é bem mais barato:**
+
+**A) Tela de "alterar senha" para quem já está logado.** Não precisa de e-mail —
+o usuário já está autenticado, então basta uma tela simples que grava a nova
+senha. Resolve o essencial: cada um passa a ter a sua. O comentário no código
+diz que "ambos exigiriam envio de e-mail", mas isso vale para a recuperação,
+não para a troca com o usuário logado.
+
+**B) Recuperação de senha ("Esqueci a senha").** Aí sim precisa de envio de
+e-mail configurado no Supabase Auth — servidor SMTP próprio ou o serviço padrão,
+que tem limite de envios. Necessário se alguém esquecer a senha e não puder
+esperar o administrador.
+
+**Sugestão:** começar pela A, que é pequena e já elimina a senha compartilhada.
+A B entra quando o número de usuários crescer e o suporte manual pesar.
+
+**A decidir:**
+- Forçar troca no primeiro acesso, ou deixar opcional?
+- Exigir senha forte? O Supabase tem verificação de senha vazada (hoje
+  desligada — ver Pendências técnicas).
+
+---
+
 ---
 
 # Pendências técnicas

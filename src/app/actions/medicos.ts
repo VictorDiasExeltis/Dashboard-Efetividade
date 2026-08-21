@@ -38,6 +38,21 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
         ? sql`SELECT ciclo FROM ciclos_fechados ORDER BY ciclo DESC LIMIT 3`
         : sql`SELECT DISTINCT ciclo FROM metas_ciclo ORDER BY ciclo DESC LIMIT 3`;
 
+
+    // Setor fora do consolidado na MAIORIA dos ciclos da janela nao entra na
+    // lista: se ele nao conta para cobertura, seus medicos nao sao alvo de
+    // retomada. Criterio de maioria porque `considerar` varia entre ciclos —
+    // dos 5 setores fora hoje, nenhum esta fora nos tres.
+    // NOT EXISTS (e nao NOT IN) para ser seguro se cod_setor for nulo.
+    const setorConsideradoWhere = sql`
+      AND NOT EXISTS (
+        SELECT 1 FROM metas_ciclo mc_c
+        WHERE mc_c.cod_setor = m.cod_setor
+          AND mc_c.ciclo IN (${ciclos3})
+        GROUP BY mc_c.cod_setor
+        HAVING COUNT(*) FILTER (WHERE mc_c.considerar IS FALSE)
+             > COUNT(*) FILTER (WHERE mc_c.considerar IS TRUE)
+      )`;
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')
       ? sql`AND EXISTS (
           SELECT 1
@@ -82,6 +97,7 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
           WHERE c.ciclo IN (${ciclos3})
         ))
         ${territorioExists}
+        ${setorConsideradoWhere}
       GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score, m.potencial, h_med.nome_setor, h_med.nome_distrito
       ORDER BY m.score DESC NULLS LAST, m.nome_medico
     `);
@@ -153,6 +169,19 @@ const _getTotalMedicosAtivosCached = cacheLoader(
           )
         ))
         ${territorioExists}
+        -- Mesmo criterio da lista: setor fora do consolidado na maioria dos
+        -- 3 ciclos nao entra, para o total e a lista falarem da mesma base.
+        AND NOT EXISTS (
+          SELECT 1 FROM metas_ciclo mc_c
+          WHERE mc_c.cod_setor = m.cod_setor
+            AND mc_c.ciclo IN (
+              SELECT DISTINCT mc2.ciclo FROM metas_ciclo mc2
+              ORDER BY mc2.ciclo DESC LIMIT 3
+            )
+          GROUP BY mc_c.cod_setor
+          HAVING COUNT(*) FILTER (WHERE mc_c.considerar IS FALSE)
+               > COUNT(*) FILTER (WHERE mc_c.considerar IS TRUE)
+        )
     `);
 
     return Number((result[0] as any)?.total ?? 0);
