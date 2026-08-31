@@ -1,7 +1,11 @@
 # Melhorias e mudanças pendentes
 
 Backlog do Dashboard de Efetividade. Itens levantados pelo Victor, para
-trabalhar depois. Nada aqui foi implementado.
+trabalhar depois.
+
+Os itens concluídos ficam aqui, marcados, em vez de sair da lista — o registro
+do que foi decidido e por quê costuma valer mais que o item em si. Concluídos
+até agora: **5** (18/08) e **7** (21/08).
 
 ---
 
@@ -162,15 +166,52 @@ discutir código.
 
 ---
 
-## 7. Senha individual para cada usuário
+## 7. Senha individual para cada usuário — ✅ APLICADO 21/08
 
-**Tela:** Login (`/login`) e uma tela nova de conta/perfil.
+**Tela:** Login (`/login`) e barreira de primeiro acesso.
 
-Hoje todos os usuários entram com a **mesma senha** (`@Exeltis123`), definida na
-liberação de 18/08. E não há como trocá-la: a tela de login está com
-`showLinks={false}`, que remove "Esqueci a senha" e "Cadastre-se", e não existe
-tela de perfil no sistema. Só o administrador troca, pelo painel do Supabase,
-uma conta por vez.
+**O que foi feito (21/08, commit `c69c6b2`):** caminho **A**, na versão
+obrigatória. `PrimeiroAcessoGate` é uma barreira que cobre qualquer tela depois
+do login enquanto o usuário não trocar a senha inicial. A marca `senha_alterada`
+fica no perfil do usuário no Supabase, então vale em qualquer dispositivo e não
+volta depois de sair e entrar. Senha e marca são gravadas na mesma chamada: se
+falhar, nada é aplicado pela metade.
+
+Exigências da senha, mostradas em lista viva enquanto a pessoa digita: 8
+caracteres, 1 maiúscula, 1 número e 1 símbolo. As expressões tratam letra
+acentuada como letra — sem isso, "Ção" contaria o "Ç" como símbolo e "ção"
+passaria como se tivesse maiúscula.
+
+**Testado de ponta a ponta em 21/08** com usuário novo: login → barreira →
+senha definida → marca gravada, sem erro no log de autenticação. Perfil ficou
+`{"email_verified": true, "senha_alterada": true}`, sem sobrescrever o que já
+existia.
+
+**Decisões tomadas no caminho:**
+- Barreira obrigatória, não opcional, e não um botão na barra lateral — a
+  troca precisa acontecer, não depender de alguém lembrar.
+- Recuperação de senha continua manual (item B abaixo, não feito): o rodapé do
+  login leva a um e-mail para o suporte.
+- A conta do Victor recebeu a marca **sem** trocar a senha, a pedido — ela segue
+  com a senha inicial compartilhada.
+- **Cadastro público fechado no Supabase (21/08).** Estava aberto: dava para
+  criar conta batendo direto no serviço de autenticação, sem passar pela tela de
+  login. Confirmação de e-mail era a única trava, e o envio funcionava.
+
+**Ainda em aberto:**
+- Proteção de senha vazada segue **desligada** (ver Pendências técnicas). As
+  regras de composição não pegam senha previsível: `Exeltis@2026` cumpre as
+  quatro. As duas coisas somam, não se substituem.
+- Caminho **B** (autoatendimento de "esqueci a senha") não foi feito — depende
+  de SMTP configurado.
+
+---
+
+**Contexto de quando o item foi criado:** todos os usuários entravam com a
+**mesma senha** (`@Exeltis123`), definida na liberação de 18/08. Não havia como
+trocá-la: a tela de login está com `showLinks={false}`, que remove "Esqueci a
+senha" e "Cadastre-se", e não existia tela de perfil. Só o administrador
+trocava, pelo painel do Supabase, uma conta por vez.
 
 **Consequências:**
 - A senha compartilhada fica na caixa de entrada de todos, indefinidamente.
@@ -195,10 +236,56 @@ esperar o administrador.
 **Sugestão:** começar pela A, que é pequena e já elimina a senha compartilhada.
 A B entra quando o número de usuários crescer e o suporte manual pesar.
 
-**A decidir:**
-- Forçar troca no primeiro acesso, ou deixar opcional?
-- Exigir senha forte? O Supabase tem verificação de senha vazada (hoje
-  desligada — ver Pendências técnicas).
+**Decidido em 21/08:** feita a A, obrigatória no primeiro acesso. Senha forte
+por regra de composição, não pela verificação de senha vazada — essa continua
+desligada.
+
+---
+
+## 8. Documentação do código e do banco
+
+**Escopo:** o projeto inteiro.
+
+Hoje não existe documentação de entrada. Quem chegar no projeto — ou você mesmo
+daqui a seis meses — não tem por onde começar.
+
+**O que existe hoje:**
+
+| Documento | Estado |
+|---|---|
+| `README.md` | **boilerplate do AI Studio**, nunca editado. Manda configurar `GEMINI_API_KEY`, que o projeto não usa |
+| `Régua dos Indicadores` (18/08) | bom, mas é de negócio: explica o que cada número significa, não como o sistema funciona |
+| `MELHORIAS.md` | este arquivo — backlog, não documentação |
+| `src/lib/db/schema.ts` | espelho do banco, com comentário em cada decisão não óbvia. É hoje a melhor fonte sobre o modelo |
+| `drizzle/` | **duas migrations defasadas.** Descrevem uma `fato_diario` que não existe mais, colunas que nunca foram aplicadas e nenhuma das FKs atuais. Enganam quem confiar nelas |
+
+**O que falta, em ordem de utilidade:**
+
+1. **README de verdade.** Como rodar, quais variáveis de ambiente, como buildar,
+   onde a Vercel publica, onde fica o Supabase. Hoje o arquivo aponta para o
+   lugar errado, que é pior que não ter.
+2. **Documentação do banco.** Cada tabela: para que serve, quem alimenta, com
+   que frequência, e o que quebra se ficar desatualizada. As armadilhas
+   precisam estar escritas, não descobertas de novo — `fato_segmentacao` sem
+   ciclo reescrevendo o passado, `fato_ciclo_resumo` divergindo de `fato_abonos`
+   de propósito, `metas_ciclo` sem dimensão de segmentação, o índice em
+   `fato_amostras.id_visita` que existe para o DELETE não estourar timeout.
+3. **Documentação das views e RPCs.** `ciclos_fechados`, `fato_visitas_fechado` e
+   `get_cobertura_dinamica` carregam regra de negócio e não aparecem em
+   `schema.ts`. Quem lê só o código não sabe que existem.
+4. **Mapa das telas.** Cada tela, de quais tabelas lê e qual regra aplica. A
+   `Régua dos Indicadores` já cobre o lado do negócio; falta ligar cada
+   indicador ao caminho no código.
+5. **Como fazer as cargas.** Enquanto a Central de Cargas não grava, a carga é
+   script manual e o procedimento só existe na cabeça de quem fez.
+
+**A decidir quando formos implementar:**
+- Documento único ou uma pasta `docs/` separada por assunto?
+- As migrations defasadas: apagar, ou regerar a partir do banco real? Deixar
+  como estão é a pior opção — parecem verdade e não são.
+- O `schema.ts` continua sendo a fonte da verdade do modelo, com a documentação
+  apontando para ele, ou a descrição das tabelas passa a viver no documento?
+- Vale gerar diagrama de relacionamento, ou tabela em texto resolve?
 
 ---
 
@@ -206,7 +293,7 @@ A B entra quando o número de usuários crescer e o suporte manual pesar.
 
 # Pendências técnicas
 
-Levantadas durante o trabalho de 14 a 18/08/2026. Não são pedidos novos — são
+Levantadas durante o trabalho de 14 a 21/08/2026. Não são pedidos novos — são
 coisas que já existem e ficaram em aberto. Ordenadas por risco.
 
 ## Dados de segmentação
@@ -254,7 +341,16 @@ coisas que já existem e ficaram em aberto. Ordenadas por risco.
   manualmente. Revisitar antes de abrir para a força de vendas: exigiria
   política por território.
 - **Proteção de senha vazada desligada** no Supabase Auth. Só pode ser ligada no
-  dashboard, não por código.
+  dashboard, não por código. Ficou mais relevante depois de 21/08, quando os
+  usuários passaram a escolher a própria senha: as regras de composição não
+  pegam senha previsível — `Exeltis@2026` cumpre as quatro. O componente já tem
+  a mensagem de erro traduzida para esse caso, ela só nunca aparece.
+- **Cadastro público — resolvido em 21/08.** Estava aberto: o serviço de
+  autenticação aceitava criação de conta batendo direto nele, sem passar pela
+  tela de login, com e-mail de qualquer domínio. A única trava era a confirmação
+  por e-mail, e o envio funcionava. Fechado no painel do Supabase
+  (`disable_signup`). A Central de Cargas não estava exposta por esse caminho —
+  ela tem lista de e-mails autorizados.
 - **Relatório da colega é público.** `public/relatorio-colega/` é servido sem
   autenticação e o `tela-4.html` tem a senha `Exeltis2026` em texto claro no
   código-fonte. Decisão de manter assim por ora, por não ser possível mexer nos
@@ -293,6 +389,21 @@ usuários, em linguagem de negócio — o que mudou na tela, o que a pessoa vai
 notar de diferente e, quando for o caso, o que ela precisa fazer.
 
 As notas ficam em `NOTAS-DE-ATUALIZACAO.md`.
+
+**Pendente:** o arquivo ainda não existe, e a nota da rodada de 18 a 21/08 não
+foi escrita. O que ela precisa cobrir:
+
+- **Tela de senha no primeiro acesso** — é o único item que exige ação do
+  usuário, então abre a nota.
+- **Médicos não Visitados: 457 → 280.** Passou a desconsiderar setores marcados
+  como "não considerar". O usuário vai notar a lista encolher e precisa saber
+  por quê, senão parece perda de dado.
+- **Coluna "Indicativo" oculta** na Análise de Ciclo, em validação.
+- **Cores padronizadas por estrutura** nos três gráficos, e o card de
+  informações passou a seguir as colunas.
+- **Card de resumo removido** dos Insights.
+- **Relatório de Ranking (tela-3) atualizado** pela área: período Jun/25, filtro
+  Top 6 marcas, expansão por segmento e card de zero coroas.
 
 <!--
 Para acrescentar um item, copie o bloco abaixo:

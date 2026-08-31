@@ -32,6 +32,30 @@ import { useLayout } from '@/src/context/LayoutContext';
 
 const ROWS_PER_PAGE = 12;
 
+// Janela de abandono. O seletor vive no DashboardFilters (showPeriodo); aqui
+// ficam só os textos que a tela escreve por extenso.
+//
+// Quanto maior a janela, MENOR a lista: passar 6 ciclos sem nenhuma visita é
+// bem mais raro que passar 3. Medido em 31/08/2026, sem filtro de território —
+// 3 ciclos: 280 médicos · 6: 97 · ano: 60.
+//
+// A janela de 1 ciclo existiu e foi removida: ela devolvia 2.426 médicos, que é
+// só o complemento da cobertura do ciclo (15.630 ativos − 12.591 visitados no
+// 202609). Ficar de fora de um ciclo é operação normal, não abandono — a tela
+// é de retomada, e misturar as duas leituras tornava a lista inútil.
+const PERIODO_SUBTITULO: Record<string, string> = {
+  '3':   'Médicos ativos sem visitas nos últimos 3 ciclos',
+  '6':   'Médicos ativos sem visitas nos últimos 6 ciclos',
+  'ano': 'Médicos ativos sem visitas desde o início do ano',
+};
+
+// Trecho reaproveitado no meio das frases dos cards ("...sem visitas <texto>").
+const PERIODO_TEXTO: Record<string, string> = {
+  '3':   'nos últimos 3 ciclos',
+  '6':   'nos últimos 6 ciclos',
+  'ano': 'desde o início do ano',
+};
+
 // Chaves de ordenação aceitas pelo header da tabela. As marcas reaproveitam
 // a chave do PRODUCT_COLUMNS (slinda, regenesis...) e ordenam pela "ranking"
 // de segmentação (CONQUISTAR = 1, melhor; nulos vão pro fim).
@@ -183,6 +207,9 @@ export function TargetListClient() {
   const distritoRaw = searchParams.get('distrito')  || 'Todos';
   const distrito    = estrutura === 'Setor' && distritoRaw === 'Todos' ? 'MG/CO' : distritoRaw;
   const setor       = searchParams.get('setor')     || 'Todos';
+  // Janela de abandono. Fica na URL como os demais filtros: sobrevive ao F5 e
+  // o link enviado a alguém abre no mesmo recorte. Só esta tela usa `periodo`.
+  const periodo     = searchParams.get('periodo')   || '3';
 
   const { setHeaderState } = useLayout();
 
@@ -197,8 +224,9 @@ export function TargetListClient() {
     let cancelled = false;
     setLoading(true);
     Promise.all([
-      getMedicosNaoVisitados(distrito, setor),
-      getTotalMedicosAtivosTerritorio(distrito, setor),
+      // Mesmo `periodo` nos dois: a Taxa de Abandono divide um pelo outro.
+      getMedicosNaoVisitados(distrito, setor, false, 'Todos', periodo),
+      getTotalMedicosAtivosTerritorio(distrito, setor, periodo),
     ])
       .then(([data, total]) => {
         if (cancelled) return;
@@ -208,7 +236,7 @@ export function TargetListClient() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [distrito, setor]);
+  }, [distrito, setor, periodo]);
 
   // Resetar página quando o filtro de busca muda
   useEffect(() => { setPage(1); }, [searchTerm]);
@@ -216,15 +244,16 @@ export function TargetListClient() {
   useEffect(() => {
     setHeaderState({
       title: "Médicos não Visitados",
-      subtitle: "Médicos ativos sem visitas nos últimos 3 ciclos",
+      subtitle: PERIODO_SUBTITULO[periodo] ?? PERIODO_SUBTITULO['3'],
       filters: (
         <Suspense fallback={<div className="h-10 w-40 bg-slate-100 animate-pulse rounded-md" />}>
-          <DashboardFilters availableSetores={availableSetores} />
+          {/* showPeriodo liga o campo de janela, que só esta tela usa. */}
+          <DashboardFilters availableSetores={availableSetores} showPeriodo />
         </Suspense>
       )
     });
     return () => setHeaderState({});
-  }, [setHeaderState, availableSetores]);
+  }, [setHeaderState, availableSetores, periodo]);
 
   // Filtro client-side por nome ou CRM
   const filteredDoctors = useMemo(() => {
@@ -293,6 +322,11 @@ export function TargetListClient() {
       CRMUF:          d.crmuf,
       Setor:          d.nome_setor ?? '',
       Distrito:       d.nome_distrito ?? '',
+      // Endereço só no arquivo — na tela a tabela já é larga demais.
+      Estado:         d.estado    ?? '',
+      Município:      d.municipio ?? '',
+      Bairro:         d.bairro    ?? '',
+      CEP:            d.cep       ?? '',
       Slinda:         d.slinda     ?? '',
       Regenesis:      d.regenesis  ?? '',
       Gynpro:         d.gynpro     ?? '',
@@ -305,7 +339,10 @@ export function TargetListClient() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Médicos não Visitados');
     const today = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `medicos-nao-visitados_${today}.xlsx`);
+    // A janela vai no nome: com o filtro de período, o mesmo arquivo pode ter
+    // 2.400 médicos ou 60, e sem essa marca não dá para saber qual é qual.
+    const janelaArquivo = { '3': '3-ciclos', '6': '6-ciclos', ano: 'ano' }[periodo] ?? '3-ciclos';
+    XLSX.writeFile(wb, `medicos-nao-visitados_${janelaArquivo}_${today}.xlsx`);
   }
 
   const totalPages = Math.max(1, Math.ceil(sortedDoctors.length / ROWS_PER_PAGE));
@@ -313,8 +350,12 @@ export function TargetListClient() {
   const startIdx   = (safePage - 1) * ROWS_PER_PAGE;
   const pageRows   = sortedDoctors.slice(startIdx, startIdx + ROWS_PER_PAGE);
 
-  // Taxa de abandono: % de médicos ativos do território sem visita nos últimos
-  // 3 ciclos. Denominador é o total de ativos vinculados ao território (mesma
+  // Trecho de texto da janela escolhida, para os cards não afirmarem "3 ciclos"
+  // quando o usuário está olhando outra coisa.
+  const janelaTexto = PERIODO_TEXTO[periodo] ?? PERIODO_TEXTO['3'];
+
+  // Taxa de abandono: % de médicos ativos do território sem visita na janela
+  // escolhida. Denominador é o total de ativos vinculados ao território (mesma
   // definição usada na lista), garantindo coerência entre numerador e total.
   const taxaAbandono = totalAtivos > 0
     ? (doctors.length / totalAtivos) * 100
@@ -331,11 +372,11 @@ export function TargetListClient() {
     {
       title: "Total sem Visita",
       value: doctors.length.toLocaleString('pt-BR'),
-      description: "Médicos não visitados nos últimos 3 ciclos",
+      description: `Médicos não visitados ${janelaTexto}`,
       icon: Users,
       color: "text-slate-600",
       bg: "bg-slate-100",
-      tooltip: "Médicos ativos no painel sem visitas registradas nos últimos 3 ciclos."
+      tooltip: `Médicos ativos no painel sem visitas registradas ${janelaTexto}.`
     },
     {
       title: "Médicos não Visitados",
@@ -348,7 +389,7 @@ export function TargetListClient() {
       icon: TrendingDown,
       color: "text-rose-600",
       bg: "bg-rose-50",
-      tooltip: "Percentual de médicos sem visitas nos últimos 3 ciclos em relação ao total de médicos ativos do território. (Desconsiderando médicos incluídos nos últimos 3 ciclos)"
+      tooltip: `Percentual de médicos sem visitas ${janelaTexto} em relação ao total de médicos ativos do território. (Desconsiderando médicos incluídos na mesma janela)`
     },
     {
       title: "Alto Potencial Não Visitado",
@@ -357,7 +398,7 @@ export function TargetListClient() {
       icon: Flame,
       color: "text-purple-600",
       bg: "bg-purple-50",
-      tooltip: "Médicos sem visitas nos últimos 3 ciclos com alto potencial de prescrição (potencial 1 ou 2)."
+      tooltip: `Médicos sem visitas ${janelaTexto} com alto potencial de prescrição (potencial 1 ou 2).`
     }
   ];
 

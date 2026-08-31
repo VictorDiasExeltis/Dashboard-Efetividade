@@ -12,31 +12,60 @@ import type { MedicoNaoVisitado } from './medicos.types';
 // 30min. requireUser fica FORA do cache (auth precisa rodar sempre).
 // soFechado=true → usa só ciclos fechados (tela de Insights). Default false →
 // inclui o ciclo aberto/parcial (tela Target List, visão operacional ao vivo).
-// ciclo: 'Todos' = janela dos 3 ciclos mais recentes; um ciclo específico
-// (ex.: '202607') restringe o "sem visita" àquele único ciclo (filtro de Insights).
+// ciclo: 'Todos' = usa a janela de `periodo`; um ciclo específico (ex.: '202607')
+// colapsa a janela àquele único ciclo (filtro de Insights).
+//
+// periodo: tamanho da janela de "abandono" quando ciclo = 'Todos'.
+//   '3' | '6' = os N ciclos mais recentes
+//   'ano'     = todos os ciclos do ano do ciclo mais recente
+// A janela funciona ao contrário do que parece: quanto MAIOR, MENOR a lista —
+// passar 6 ciclos sem nenhuma visita é mais raro que passar 3. Medido em 31/08:
+// 3 ciclos = 280 médicos, 6 = 97, ano = 60.
+//
+// Janela de 1 ciclo NÃO é aceita, de propósito: ela devolvia 2.426 médicos, que
+// é apenas o complemento da cobertura do ciclo (15.630 ativos − 12.591
+// visitados no 202609). Ficar de fora de um ciclo é operação normal, não
+// abandono. Um link antigo com `?periodo=1` cai no padrão de 3.
 export async function getMedicosNaoVisitados(
   distrito: string = 'Todos',
   setor:    string = 'Todos',
   soFechado: boolean = false,
   ciclo:     string = 'Todos',
+  periodo:   string = '3',
 ): Promise<MedicoNaoVisitado[]> {
   await requireUser();
-  return fetchMedicosNaoVisitadosCached(distrito, setor, soFechado, ciclo);
+  return fetchMedicosNaoVisitadosCached(distrito, setor, soFechado, ciclo, periodo);
 }
 
 const fetchMedicosNaoVisitadosCached = unstable_cache(
-  async (distrito: string, setor: string, soFechado: boolean, ciclo: string): Promise<MedicoNaoVisitado[]> => {
+  async (distrito: string, setor: string, soFechado: boolean, ciclo: string, periodo: string): Promise<MedicoNaoVisitado[]> => {
   try {
     if (!db) return [];
 
-    // Fonte de visitas e janela de ciclos conforme o modo. Um ciclo específico
-    // colapsa a janela para aquele ciclo; senão usa os 3 mais recentes.
+    // Fonte de visitas e janela de ciclos conforme o modo.
     const fv = soFechado ? sql`fato_visitas_fechado` : sql`fato_visitas`;
+
+    // Origem dos ciclos: a lista de fechados ou os ciclos com meta carregada.
+    const origemCiclos = soFechado
+      ? sql`SELECT ciclo FROM ciclos_fechados`
+      : sql`SELECT DISTINCT ciclo FROM metas_ciclo`;
+
+    // Só 3 e 6 são aceitos; qualquer outro valor cai em 3 (o padrão histórico
+    // da tela). Evita que um parâmetro de URL vire LIMIT arbitrário.
+    const n = periodo === '6' ? 6 : 3;
+
+    const janela = periodo === 'ano'
+      // Ano do ciclo mais recente — os 4 primeiros dígitos de "AAAANN". Hoje
+      // toda a base é 2026, então isto equivale a "todos"; passa a diferir de
+      // "últimos 6" quando o primeiro ciclo de 2027 entrar.
+      ? sql`SELECT ciclo FROM (${origemCiclos}) c
+            WHERE LEFT(ciclo, 4) = (SELECT LEFT(MAX(ciclo), 4) FROM (${origemCiclos}) c2)`
+      : sql`SELECT ciclo FROM (${origemCiclos}) c ORDER BY ciclo DESC LIMIT ${n}`;
+
+    // Um ciclo específico vence a janela (usado pela tela de Insights).
     const ciclos3 = (!!ciclo && ciclo !== 'Todos')
       ? sql`SELECT ${ciclo}::varchar AS ciclo`
-      : soFechado
-        ? sql`SELECT ciclo FROM ciclos_fechados ORDER BY ciclo DESC LIMIT 3`
-        : sql`SELECT DISTINCT ciclo FROM metas_ciclo ORDER BY ciclo DESC LIMIT 3`;
+      : janela;
 
 
     // Setor fora do consolidado na MAIORIA dos ciclos da janela nao entra na
@@ -74,6 +103,11 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
         m.especialidade,
         h_med.nome_setor    AS nome_setor,
         h_med.nome_distrito AS nome_distrito,
+        -- Endereço: só aparece no Excel exportado, não na tabela da tela.
+        m.estado,
+        m.municipio,
+        m.bairro,
+        m.cep,
         MAX(CASE WHEN s.id_marca = 10005 THEN s.segmentacao END) AS slinda,
         MAX(CASE WHEN s.id_marca = 10004 THEN s.segmentacao END) AS regenesis,
         MAX(CASE WHEN s.id_marca = 10002 THEN s.segmentacao END) AS gynpro,
@@ -84,13 +118,15 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
       LEFT JOIN dim_hierarquia h_med ON h_med.cod_setor = m.cod_setor
       LEFT JOIN fato_segmentacao s ON s.crmuf = m.crmuf
       WHERE m.status = TRUE
-        -- Sem visita nos 3 ciclos mais recentes (janela de "abandono")
+        -- Sem visita em nenhum ciclo da janela (a "janela de abandono")
         AND NOT EXISTS (
           SELECT 1 FROM ${fv} v
           WHERE v.crmuf = m.crmuf
             AND v.ciclo IN (${ciclos3})
         )
-        -- Não incluídos nos últimos 3 ciclos
+        -- Incluído no painel ANTES da janela. Acompanha o período escolhido:
+        -- sem isso, ampliar para 6 ciclos faria médico novo aparecer como
+        -- abandonado, já que ele não teve como ser visitado nos ciclos antigos.
         AND (m.data_inclusao IS NULL OR m.data_inclusao < (
           SELECT MIN(c.data)
           FROM public.dim_calendario c
@@ -98,7 +134,8 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
         ))
         ${territorioExists}
         ${setorConsideradoWhere}
-      GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score, m.potencial, h_med.nome_setor, h_med.nome_distrito
+      GROUP BY m.crmuf, m.nome_medico, m.classificacao, m.especialidade, m.score, m.potencial, h_med.nome_setor, h_med.nome_distrito,
+               m.estado, m.municipio, m.bairro, m.cep
       ORDER BY m.score DESC NULLS LAST, m.nome_medico
     `);
 
@@ -117,6 +154,10 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
       especialidade: r.especialidade ?? null,
       nome_setor:    r.nome_setor    ?? null,
       nome_distrito: r.nome_distrito ?? null,
+      estado:        r.estado        ?? null,
+      municipio:     r.municipio     ?? null,
+      bairro:        r.bairro        ?? null,
+      cep:           r.cep           ?? null,
     }));
   } catch (e) {
     console.error('getMedicosNaoVisitados error:', e);
@@ -130,19 +171,30 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
 // Total de médicos ativos vinculados ao território (via histórico de visitas).
 // Denominador para a "Taxa de Abandono". Usa a mesma definição de vínculo
 // território→médico que a lista de não-visitados, garantindo coerência do %.
+// `periodo` precisa ser o MESMO da lista: as duas regras que dependem da janela
+// (médico incluído antes dela, setor considerado na maioria dela) entram aqui
+// também. Com janelas diferentes, a Taxa de Abandono compararia uma lista de 6
+// ciclos contra um denominador de 3.
 export async function getTotalMedicosAtivosTerritorio(
   distrito: string = 'Todos',
-  setor:    string = 'Todos'
+  setor:    string = 'Todos',
+  periodo:  string = '3',
 ): Promise<number> {
   await requireUser();
-  return _getTotalMedicosAtivosCached(distrito, setor);
+  return _getTotalMedicosAtivosCached(distrito, setor, periodo);
 }
 
 const _getTotalMedicosAtivosCached = cacheLoader(
   ['total-medicos-ativos'],
-  async (distrito: string, setor: string): Promise<number> => {
+  async (distrito: string, setor: string, periodo: string): Promise<number> => {
   try {
     if (!db) return 0;
+
+    const n = periodo === '6' ? 6 : 3;
+    const janela = periodo === 'ano'
+      ? sql`SELECT ciclo FROM (SELECT DISTINCT ciclo FROM metas_ciclo) c
+            WHERE LEFT(ciclo, 4) = (SELECT LEFT(MAX(ciclo), 4) FROM metas_ciclo)`
+      : sql`SELECT DISTINCT ciclo FROM metas_ciclo ORDER BY ciclo DESC LIMIT ${n}`;
 
     const territorioExists = (distrito !== 'Todos' || setor !== 'Todos')
       ? sql`AND EXISTS (
@@ -159,25 +211,20 @@ const _getTotalMedicosAtivosCached = cacheLoader(
       SELECT COUNT(*)::int AS total
       FROM dim_medicos m
       WHERE m.status = TRUE
-        -- Não incluídos nos últimos 3 ciclos
+        -- Incluído antes da janela — mesma regra da lista.
         AND (m.data_inclusao IS NULL OR m.data_inclusao < (
           SELECT MIN(c.data)
           FROM public.dim_calendario c
-          WHERE c.ciclo IN (
-            SELECT DISTINCT mc.ciclo FROM metas_ciclo mc
-            ORDER BY mc.ciclo DESC LIMIT 3
-          )
+          WHERE c.ciclo IN (${janela})
         ))
         ${territorioExists}
         -- Mesmo criterio da lista: setor fora do consolidado na maioria dos
-        -- 3 ciclos nao entra, para o total e a lista falarem da mesma base.
+        -- ciclos da janela nao entra, para o total e a lista falarem da
+        -- mesma base.
         AND NOT EXISTS (
           SELECT 1 FROM metas_ciclo mc_c
           WHERE mc_c.cod_setor = m.cod_setor
-            AND mc_c.ciclo IN (
-              SELECT DISTINCT mc2.ciclo FROM metas_ciclo mc2
-              ORDER BY mc2.ciclo DESC LIMIT 3
-            )
+            AND mc_c.ciclo IN (${janela})
           GROUP BY mc_c.cod_setor
           HAVING COUNT(*) FILTER (WHERE mc_c.considerar IS FALSE)
                > COUNT(*) FILTER (WHERE mc_c.considerar IS TRUE)

@@ -3,17 +3,59 @@
 import React, { Suspense } from 'react';
 import { SegmentacaoFilters } from '@/src/components/dashboard/SegmentacaoFilters';
 import { Card, CardContent } from "@/src/components/ui/card";
-import { HelpCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { HelpCircle, ListFilter } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useLayout } from '@/src/context/LayoutContext';
 import {
   getSegmentacaoData,
   getClassificacoes,
-  getCiclos,
   getVisitadosPorPotencial,
+  getSegmentacaoRecorte,
   type PotencialVisitacao,
+  type MedicoRecorte,
 } from '@/src/app/actions';
+import { RecorteModal, type ColunaRecorte } from '@/src/components/recorte/RecorteModal';
+import { SEGMENTACOES, slug } from '@/src/lib/recorte/formato';
+
+// Colunas do recorte detalhado. Fora do componente para não recriar a cada
+// render — o RecorteModal usa a referência em dependências de efeito.
+const COLUNAS_RECORTE: ColunaRecorte<MedicoRecorte>[] = [
+  { chave: 'crmuf',       label: 'CRM/UF',        valor: (l) => l.crmuf },
+  { chave: 'nome',        label: 'Nome',          valor: (l) => l.nome_medico },
+  { chave: 'setor',       label: 'Setor',         valor: (l) => l.nome_setor },
+  { chave: 'distrito',    label: 'Distrito',      valor: (l) => l.nome_distrito },
+  { chave: 'class',       label: 'Classificação', valor: (l) => l.classificacao ?? '—' },
+  { chave: 'potencial',   label: 'Potencial',     className: 'text-center', valor: (l) => l.potencial ?? '—' },
+  { chave: 'segmentacao', label: 'Segmentação',   valor: (l) => l.segmentacao },
+  { chave: 'visitado',    label: 'Visitado',      valor: (l) => (l.visitado ? 'Sim' : 'Não') },
+  { chave: 'visitas',     label: 'Visitas',       className: 'text-right', valor: (l) => l.visitas },
+  // Endereço: só no Excel. Na tela já são 9 colunas disputando largura.
+  { chave: 'estado',    label: 'Estado',    somenteExport: true, valor: (l) => l.estado    ?? '' },
+  { chave: 'municipio', label: 'Município', somenteExport: true, valor: (l) => l.municipio ?? '' },
+  { chave: 'bairro',    label: 'Bairro',    somenteExport: true, valor: (l) => l.bairro    ?? '' },
+  { chave: 'cep',       label: 'CEP',       somenteExport: true, valor: (l) => l.cep       ?? '' },
+];
+
+// Descreve os filtros vigentes em texto — vai no cabeçalho do modal e dentro
+// do arquivo exportado, para a planilha não chegar sem contexto no e-mail de
+// quem a receber.
+function descreverRecorte(
+  ciclo: string, distrito: string, setor: string,
+  classificacao: string, potencial: string,
+  segmentacao: string, situacao: string,
+): string {
+  const partes: string[] = [];
+  partes.push(ciclo === 'Todos' ? 'Todos os ciclos' : `Ciclo ${ciclo}`);
+  if (distrito !== 'Todos') partes.push(`Distrito ${distrito}`);
+  if (setor !== 'Todos') partes.push(`Setor ${setor}`);
+  if (classificacao !== 'Todas') partes.push(`Classificação ${classificacao}`);
+  if (potencial !== 'Todos') partes.push(`Potencial ${potencial}`);
+  if (segmentacao !== 'Todas') partes.push(segmentacao);
+  if (situacao === 'visitados') partes.push('Visitados');
+  if (situacao === 'nao_visitados') partes.push('Não visitados');
+  return partes.join(' · ');
+}
 
 const productMarcaMap: Record<string, number> = {
   "FAMÍLIA REGENESIS": 10004,
@@ -55,13 +97,49 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
   const [totals, setTotals] = useState<any>({ sim: '0%', simNum: 0, nao: '0%', naoNum: 0 });
   const [loading, setLoading] = useState(true);
 
+  // Recorte detalhado: abre com a base inteira da marca e estreita pelos dois
+  // filtros abaixo, que são as duas dimensões da tabela (linha e coluna).
+  const [recorteAberto, setRecorteAberto] = useState(false);
+  const [recSegmentacao, setRecSegmentacao] = useState('Todas');
+  const [recSituacao, setRecSituacao] = useState('Todos');
+
+  const marcaId = productMarcaMap[productName];
+
+  const carregarRecorte = useCallback(
+    ({ busca, limit, offset }: { busca: string; limit: number; offset: number }) =>
+      getSegmentacaoRecorte(marcaId, classificacao, distrito, setor, ciclo, potencial, {
+        segmentacao: recSegmentacao,
+        situacao: recSituacao,
+        busca,
+        limit,
+        offset,
+      }),
+    [marcaId, classificacao, distrito, setor, ciclo, potencial, recSegmentacao, recSituacao],
+  );
+
+  const exportarRecorte = useCallback(
+    async ({ busca }: { busca: string }) => {
+      // limit 0 = sem paginação: o arquivo leva o recorte inteiro, não a página.
+      const r = await getSegmentacaoRecorte(marcaId, classificacao, distrito, setor, ciclo, potencial, {
+        segmentacao: recSegmentacao,
+        situacao: recSituacao,
+        busca,
+        limit: 0,
+      });
+      return r.linhas;
+    },
+    [marcaId, classificacao, distrito, setor, ciclo, potencial, recSegmentacao, recSituacao],
+  );
+
+  const descricaoRecorte = descreverRecorte(
+    ciclo, distrito, setor, classificacao, potencial, recSegmentacao, recSituacao,
+  );
+
   useEffect(() => {
     let cancelled = false;
     async function loadData() {
       const marcaId = productMarcaMap[productName];
       if (!marcaId) { setLoading(false); return; }
-      // Aguarda o ciclo default ser resolvido (lista vinda do banco)
-      if (!ciclo) return;
 
       setLoading(true);
       try {
@@ -132,6 +210,17 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
             </span>
           )}
         </div>
+
+        {/* Abre a lista de médicos por trás desta tabela, no mesmo recorte. */}
+        <button
+          onClick={() => setRecorteAberto(true)}
+          disabled={!marcaId || loading}
+          title="Ver a lista de médicos deste recorte"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ListFilter className="h-3.5 w-3.5" />
+          Detalhar
+        </button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
@@ -214,6 +303,43 @@ const SegmentacaoTable: React.FC<SegmentacaoTableProps> = ({
           </tfoot>
         </table>
       </div>
+
+      <RecorteModal<MedicoRecorte>
+        aberto={recorteAberto}
+        onFechar={() => setRecorteAberto(false)}
+        tela="Visitação × Segmentação"
+        titulo={productName}
+        recorte={descricaoRecorte}
+        colunas={COLUNAS_RECORTE}
+        // Recarrega quando os filtros do modal ou os da tela mudam.
+        versao={`${recSegmentacao}|${recSituacao}|${classificacao}|${distrito}|${setor}|${ciclo}|${potencial}`}
+        carregar={carregarRecorte}
+        exportar={exportarRecorte}
+        nomeArquivo={`visitacao-segmentacao_${slug(productName)}_${slug(descricaoRecorte)}`}
+        filtros={
+          <>
+            <select
+              value={recSegmentacao}
+              onChange={(e) => setRecSegmentacao(e.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="Todas">Todas as segmentações</option>
+              {SEGMENTACOES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <select
+              value={recSituacao}
+              onChange={(e) => setRecSituacao(e.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="Todos">Visitados e não visitados</option>
+              <option value="visitados">Só visitados</option>
+              <option value="nao_visitados">Só não visitados</option>
+            </select>
+          </>
+        }
+      />
     </Card>
   );
 };
@@ -239,23 +365,21 @@ export default function VisitacaoXSegmentacao() {
     5: { total: 0, visitados: 0 },
   });
   const [loadingKpis, setLoadingKpis] = useState(true);
-  const [ciclos,      setCiclos]      = useState<string[]>([]);
 
-  // Default do ciclo: último disponível no banco. Enquanto a lista não chega,
-  // mantemos string vazia — as queries downstream só rodam quando ciclo != ''.
-  const ultimoCiclo = ciclos.length ? ciclos[ciclos.length - 1] : '';
-  const ciclo       = urlParams.get('ciclo') || ultimoCiclo;
+  // Default do ciclo: TODOS. A tela abre na visão acumulada do painel; o
+  // usuário estreita para um ciclo pelo filtro do topo quando quiser.
+  // A lista de ciclos não é mais lida aqui — quem monta o seletor é o
+  // SegmentacaoFilters, que busca a própria lista.
+  const ciclo       = urlParams.get('ciclo') || 'Todos';
 
   useEffect(() => {
     // Pré-carrega lista de classificações pro filtro lateral.
     getClassificacoes();
-    getCiclos().then(setCiclos);
   }, []);
 
   // Cobertura de visitação por potencial — depende do ciclo (e do território /
-  // classificação). Aguarda o ciclo default ser resolvido antes de consultar.
+  // classificação).
   useEffect(() => {
-    if (!ciclo) return;
     setLoadingKpis(true);
     getVisitadosPorPotencial(distrito, setor, classificacao, ciclo)
       .then(setPotenciais)

@@ -185,13 +185,22 @@ const _getDesempenhoVisitacaoCached = cacheLoader(
   async (ciclo: string = 'Todos'): Promise<DesempenhoVisitacaoResult> => {
   try {
     if (!db) return { ano: null, cicloInicial: null, cicloFinal: null, metaCobertura: null, rows: [] };
-    const umCiclo = !!ciclo && ciclo !== 'Todos';
-    // Recorte de ciclo: um ciclo específico OU o acumulado do ano sem o 01.
-    const metaFiltro = umCiclo
-      ? sql`AND m.ciclo = ${ciclo}`
+    // O filtro do topo permite Ctrl+clique e entrega os ciclos como CSV
+    // ("202608,202609"). Precisa virar lista: comparar com `=` contra o CSV
+    // inteiro não casa com nada e o gráfico saía vazio a partir do 2º ciclo.
+    const ciclosList = (ciclo ?? '')
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c) => c && c !== 'Todos');
+    const temCiclo = ciclosList.length > 0;
+    const cicloInList = sql.join(ciclosList.map((c) => sql`${c}`), sql`, `);
+
+    // Recorte de ciclo: os ciclos escolhidos OU o acumulado do ano sem o 01.
+    const metaFiltro = temCiclo
+      ? sql`AND m.ciclo IN (${cicloInList})`
       : sql`AND LEFT(m.ciclo, 4) = ano.y AND m.ciclo <> ano.y || '01'`;
-    const visFiltro = umCiclo
-      ? sql`AND fv.ciclo = ${ciclo}`
+    const visFiltro = temCiclo
+      ? sql`AND fv.ciclo IN (${cicloInList})`
       : sql`AND LEFT(fv.ciclo, 4) = ano.y AND fv.ciclo <> ano.y || '01'`;
     const result = await db.execute(sql`
       WITH ano AS (SELECT LEFT(MAX(ciclo), 4) AS y FROM fato_visitas_fechado),

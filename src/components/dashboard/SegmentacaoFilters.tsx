@@ -43,13 +43,10 @@ export function SegmentacaoFilters() {
     getCiclos().then(setCiclos);
   }, []);
 
-  // Último ciclo disponível serve como default quando a URL não traz nenhum
-  const ultimoCiclo = useMemo(
-    () => (ciclos.length ? ciclos[ciclos.length - 1] : ''),
-    [ciclos],
-  );
-
-  const currentCiclo         = searchParams.get('ciclo')         || ultimoCiclo;
+  // Sem ciclo na URL, a tela abre com TODOS os ciclos — mesmo padrão das
+  // demais telas consolidadas. "Todos" aqui significa a visão acumulada do
+  // painel, que é a leitura de segmentação que interessa por padrão.
+  const currentCiclo         = searchParams.get('ciclo')         || 'Todos';
   const currentClassificacao = searchParams.get('classificacao') || 'Todas';
   const currentPotencial     = searchParams.get('potencial')     || 'Todos';
   const currentEstrutura     = searchParams.get('estrutura')     || 'Distrito';
