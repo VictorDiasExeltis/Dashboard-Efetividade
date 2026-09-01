@@ -120,6 +120,20 @@ export default function LoginPage() {
             }
           }}
         />
+
+        {/* Recuperacao de senha e manual: o Supabase Auth precisaria de SMTP
+            configurado para o fluxo de "esqueci a senha". Como sao poucos
+            usuarios, o pedido vai direto ao suporte, que redefine a senha e
+            limpa a marca de primeiro acesso para o usuario escolher outra. */}
+        <p className="mt-5 text-center text-xs text-slate-500">
+          Esqueceu a senha?{" "}
+          <a
+            href="mailto:victor.eugenio@exeltis.com?subject=Dashboard%20de%20Efetividade%20-%20recuperacao%20de%20senha&body=Ola%2C%20preciso%20redefinir%20minha%20senha%20de%20acesso%20ao%20Dashboard%20de%20Efetividade.%0A%0AMeu%20e-mail%20de%20acesso%3A%20"
+            className="font-medium text-blue-600 underline underline-offset-2 hover:text-blue-700"
+          >
+            Fale com o suporte
+          </a>
+        </p>
       </div>
     </div>
   );

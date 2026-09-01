@@ -41,6 +41,9 @@ export interface CargaSpec {
   grupo: string;        // seção no hub (ex.: 'Diária', 'Ciclo', 'Cadastros')
   implementado: boolean;// false = card só mostra layout ("Em breve"), sem upload
   colunas: ColunaSpec[];
+  // Chave única da tabela no banco — usada para avisar sobre linhas repetidas
+  // no arquivo, que no upsert fariam a última prevalecer silenciosamente.
+  chaveNatural?: string[];
 }
 
 export const TIPO_INFO: Record<CargaTipo, { label: string; texto: string }> = {
@@ -67,6 +70,7 @@ export const CARGA_METAS_CICLO: CargaSpec = {
     { campo: 'tamanho_painel',   label: 'Tamanho do Painel',tipo: 'inteiro', obrigatoria: true, aliases: ['tamanho_painel', 'painel', 'medicos'] },
     { campo: 'considerar',       label: 'Considerar',      tipo: 'texto',   obrigatoria: true, aliases: ['considerar', 'ativo'] },
   ],
+  chaveNatural: ['cod_setor', 'ciclo'],
 };
 
 export const CARGA_FATO_VISITAS: CargaSpec = {
@@ -84,6 +88,7 @@ export const CARGA_FATO_VISITAS: CargaSpec = {
     { campo: 'ciclo',       label: 'Ciclo',          tipo: 'texto',   obrigatoria: true, aliases: ['ciclo'] },
     { campo: 'data_visita', label: 'Data da Visita', tipo: 'texto',   obrigatoria: true, aliases: ['data_visita', 'data', 'dt_visita'] },
   ],
+  chaveNatural: ['id_visita'],
 };
 
 export const CARGA_FATO_AMOSTRAS: CargaSpec = {
@@ -99,6 +104,7 @@ export const CARGA_FATO_AMOSTRAS: CargaSpec = {
     { campo: 'id_produto', label: 'ID do Produto',tipo: 'inteiro', obrigatoria: true, aliases: ['id_produto', 'produto', 'cod_produto'] },
     { campo: 'quantidade', label: 'Quantidade',   tipo: 'inteiro', obrigatoria: true, aliases: ['quantidade', 'qtd', 'qtde'] },
   ],
+  chaveNatural: ['id_visita', 'id_produto'],
 };
 
 // --- Grupo "Cadastros": dimensões (upsert pela chave) ------------------------
@@ -121,6 +127,7 @@ export const CARGA_DIM_MEDICOS: CargaSpec = {
     { campo: 'especialidade', label: 'Especialidade', tipo: 'texto',   obrigatoria: true, aliases: ['especialidade'] },
     { campo: 'potencial',     label: 'Potencial',     tipo: 'inteiro', obrigatoria: true, aliases: ['potencial'] },
   ],
+  chaveNatural: ['crmuf'],
 };
 
 export const CARGA_DIM_HIERARQUIA: CargaSpec = {
@@ -139,6 +146,7 @@ export const CARGA_DIM_HIERARQUIA: CargaSpec = {
     { campo: 'nome_distrito', label: 'Nome Distrito',   tipo: 'texto',   obrigatoria: true, aliases: ['nome_distrito', 'distrito'] },
     { campo: 'nome_gd',       label: 'Gerente Distrital',tipo: 'texto',  obrigatoria: true, aliases: ['nome_gd', 'gd', 'gerente'] },
   ],
+  chaveNatural: ['cod_setor'],
 };
 
 export const CARGA_DIM_PRODUTOS: CargaSpec = {
@@ -154,6 +162,7 @@ export const CARGA_DIM_PRODUTOS: CargaSpec = {
     { campo: 'nome_produto', label: 'Nome',          tipo: 'texto',   obrigatoria: true, aliases: ['nome_produto', 'produto', 'nome'] },
     { campo: 'id_marca',     label: 'ID da Marca',   tipo: 'inteiro', obrigatoria: true, aliases: ['id_marca', 'marca', 'cod_marca'] },
   ],
+  chaveNatural: ['id_produto'],
 };
 
 export const CARGA_FATO_SEGMENTACAO: CargaSpec = {
@@ -169,6 +178,7 @@ export const CARGA_FATO_SEGMENTACAO: CargaSpec = {
     { campo: 'id_marca',    label: 'ID da Marca',  tipo: 'inteiro', obrigatoria: true, aliases: ['id_marca', 'marca'] },
     { campo: 'segmentacao', label: 'Segmentação',  tipo: 'texto',   obrigatoria: true, aliases: ['segmentacao', 'segmento'] },
   ],
+  chaveNatural: ['crmuf', 'id_marca'],
 };
 
 // Cargas disponíveis no hub. Nenhuma gravando ainda (implementado:false) até a
@@ -193,11 +203,16 @@ export function getCarga(id: string): CargaSpec | undefined {
 // ---------------------------------------------------------------------------
 // Parsing/validação — roda no cliente (prévia) e a base é revalidada no servidor.
 // ---------------------------------------------------------------------------
-export type LinhaCanonica = Record<string, number | null>;
+// Um valor já convertido para o tipo declarado na coluna. Texto continua texto:
+// a versão anterior forçava tudo para número, e por isso NENHUMA carga passava —
+// `crmuf` ("SC0033895"), `segmentacao` ("CONQUISTAR") e até `considerar`
+// ("TRUE") viravam NaN e a linha inteira era recusada.
+export type ValorCanonico = string | number | null;
+export type LinhaCanonica = Record<string, ValorCanonico>;
 
 export interface ParseResult {
   ok: boolean;                 // true = sem erros e há linhas válidas
-  rows: LinhaCanonica[];       // linhas já no formato canônico (campo → número)
+  rows: LinhaCanonica[];       // linhas já no formato canônico (campo → valor)
   erros: string[];
   avisos: string[];
   colunasEncontradas: string[];
@@ -227,6 +242,20 @@ function coerceNum(v: unknown, tipo: ColunaTipo): number | null {
   return tipo === 'inteiro' ? Math.round(n) : n;
 }
 
+// Converte respeitando o tipo declarado. Só `inteiro` e `decimal` viram número;
+// `texto` é preservado como veio, apenas com as pontas aparadas.
+//
+// Retorna NaN só para número inválido — é o sinal que o chamador usa para
+// marcar erro na linha. Texto nunca produz NaN.
+function coerceValor(v: unknown, tipo: ColunaTipo): ValorCanonico {
+  if (tipo === 'texto') {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s === '' ? null : s;
+  }
+  return coerceNum(v, tipo);
+}
+
 export function parseLinhas(raw: Record<string, unknown>[], spec: CargaSpec): ParseResult {
   const erros: string[] = [];
   const avisos: string[] = [];
@@ -253,6 +282,8 @@ export function parseLinhas(raw: Record<string, unknown>[], spec: CargaSpec): Pa
     }
   }
 
+  const temColunaSetor = spec.colunas.some((c) => c.campo === 'cod_setor');
+
   const rows: LinhaCanonica[] = [];
   let linhasComErro = 0;
 
@@ -262,8 +293,8 @@ export function parseLinhas(raw: Record<string, unknown>[], spec: CargaSpec): Pa
     for (const col of spec.colunas) {
       const key = colMap[col.campo];
       if (!key) { obj[col.campo] = null; continue; }
-      const val = coerceNum(r[key], col.tipo);
-      if (Number.isNaN(val)) {
+      const val = coerceValor(r[key], col.tipo);
+      if (typeof val === 'number' && Number.isNaN(val)) {
         rowErro = true;
         if (erros.length < 10) erros.push(`Linha ${i + 2}: valor inválido em "${col.label}" → "${String(r[key])}".`);
         obj[col.campo] = null;
@@ -278,7 +309,9 @@ export function parseLinhas(raw: Record<string, unknown>[], spec: CargaSpec): Pa
         if (erros.length < 10) erros.push(`Linha ${i + 2}: "${col.label}" vazio (obrigatório).`);
       }
     }
-    if (obj.cod_setor != null && !(obj.cod_setor > 0)) {
+    // Só vale para cargas que têm setor. Antes rodava sempre e não fazia
+    // sentido em fato_segmentacao ou dim_produtos, que nem têm a coluna.
+    if (temColunaSetor && obj.cod_setor != null && !(Number(obj.cod_setor) > 0)) {
       rowErro = true;
       if (erros.length < 10) erros.push(`Linha ${i + 2}: código de setor inválido.`);
     }
@@ -286,15 +319,24 @@ export function parseLinhas(raw: Record<string, unknown>[], spec: CargaSpec): Pa
     else rows.push(obj);
   });
 
-  // Avisa sobre setores duplicados (a última ocorrência prevalece no upsert).
-  const seen = new Set<number>();
-  let dups = 0;
-  for (const row of rows) {
-    const k = row.cod_setor as number;
-    if (seen.has(k)) dups++;
-    else seen.add(k);
+  // Duplicidade pela chave natural da carga (a mesma do banco). Antes olhava
+  // sempre `cod_setor`, o que dava aviso errado onde a chave é outra: em
+  // fato_segmentacao é (crmuf, id_marca), em dim_medicos é só (crmuf).
+  if (spec.chaveNatural?.length) {
+    const vistos = new Set<string>();
+    let dups = 0;
+    for (const row of rows) {
+      const k = spec.chaveNatural.map((c) => String(row[c] ?? '')).join('|');
+      if (vistos.has(k)) dups++;
+      else vistos.add(k);
+    }
+    if (dups > 0) {
+      const rotulo = spec.chaveNatural
+        .map((c) => spec.colunas.find((x) => x.campo === c)?.label ?? c)
+        .join(' + ');
+      avisos.push(`${dups} linha(s) repetem a chave ${rotulo} — a última de cada prevalece.`);
+    }
   }
-  if (dups > 0) avisos.push(`${dups} setor(es) aparecem mais de uma vez — a última linha de cada um prevalece.`);
   if (linhasComErro > 0) avisos.push(`${linhasComErro} linha(s) ignorada(s) por erro de valor.`);
 
   return { ok: erros.length === 0 && rows.length > 0, rows, erros, avisos, colunasEncontradas: headerKeys };

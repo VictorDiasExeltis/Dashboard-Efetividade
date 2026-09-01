@@ -18,6 +18,15 @@ import { getDistritos, getCiclos, getProdutos } from '@/src/app/actions';
 
 const ESTRUTURAS = ['Brasil', 'Distrito', 'Setor'];
 
+// Janela de "abandono" da tela de Médicos não Visitados. Rótulos curtos para
+// caber na mesma largura dos demais campos; o subtítulo da tela escreve por
+// extenso. '3' é o padrão e por isso some da URL.
+const PERIODOS = [
+  { value: '3',   label: '3 ciclos' },
+  { value: '6',   label: '6 ciclos' },
+  { value: 'ano', label: 'No ano' },
+];
+
 // "202605" → "Ciclo 05"
 function formatCiclo(ciclo: string): string {
   return `Ciclo ${ciclo.slice(-2)}`;
@@ -27,12 +36,15 @@ interface DashboardFiltersProps {
   availableSetores?: string[];
   showCiclo?: boolean;
   showProduto?: boolean;
+  // Só a tela de Médicos não Visitados usa: escolhe a janela de abandono.
+  showPeriodo?: boolean;
 }
 
 export function DashboardFilters({
   availableSetores = [],
   showCiclo = false,
   showProduto = false,
+  showPeriodo = false,
 }: DashboardFiltersProps) {
   const router       = useRouter();
   const searchParams = useSearchParams();
@@ -54,6 +66,7 @@ export function DashboardFilters({
 
   const currentCiclo      = searchParams.get('ciclo')      || 'Todos';
   const currentProduto    = searchParams.get('produto')    || 'Todos';
+  const currentPeriodo    = searchParams.get('periodo')    || '3';
   const currentEstrutura  = searchParams.get('estrutura')  || 'Distrito';
   const currentDistritoRaw = searchParams.get('distrito')  || 'Todos';
   const currentSetor      = searchParams.get('setor')      || 'Todos';
@@ -123,6 +136,29 @@ export function DashboardFilters({
             defaultValue="Todos"
             disabled={!produtos.length}
           />
+        </div>
+      )}
+
+      {/* Período (opcional) — janela de abandono */}
+      {showPeriodo && (
+        <div className="flex flex-col gap-0.5 w-[86px] shrink-0">
+          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Período</label>
+          <Select
+            value={currentPeriodo}
+            // '3' é o padrão: sai da URL para o link ficar limpo.
+            onValueChange={(v) => updateParam('periodo', v === '3' ? '' : v)}
+          >
+            <SelectTrigger className={`${triggerBase} hover:border-slate-300`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-white border border-slate-200 shadow-lg rounded-lg z-[60]">
+              {PERIODOS.map((p) => (
+                <SelectItem key={p.value} value={p.value} className="rounded-md cursor-pointer transition-colors hover:bg-slate-50 focus:bg-blue-50 focus:text-blue-700">
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 

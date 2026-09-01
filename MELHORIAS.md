@@ -1,7 +1,11 @@
 # Melhorias e mudanças pendentes
 
 Backlog do Dashboard de Efetividade. Itens levantados pelo Victor, para
-trabalhar depois. Nada aqui foi implementado.
+trabalhar depois.
+
+Os itens concluídos ficam aqui, marcados, em vez de sair da lista — o registro
+do que foi decidido e por quê costuma valer mais que o item em si. Concluídos
+até agora: **5** (18/08) e **7** (21/08).
 
 ---
 
@@ -42,11 +46,254 @@ das duas.
 
 ---
 
+## 3. Revisão dos ícones de ajuda ("?") nos cards
+
+**Telas:** Visão Executiva, Alocação de Recursos, Visitação × Segmentação,
+Target List e os gráficos de Cobertura/MDV.
+
+Os cards têm um ícone de ajuda que abre um texto explicando a métrica. Revisar
+esses textos: se estão corretos, se estão claros para quem não é da área e se
+estão padronizados entre as telas.
+
+Alguns exemplos do que existe hoje:
+
+- *"Porcentagem de médicos visitados em relação ao número de médicos do painel."*
+- *"Média de visitas por dia útil trabalhado no período selecionado."*
+- *"Quantidade média de amostras entregues por médico (Total de Amostras / nº de
+  médicos distintos que receberam amostra, conforme o filtro)."*
+
+**Pontos de atenção já identificados:**
+- O texto da Cobertura fala em "médicos visitados", mas na Visão Executiva o
+  cálculo conta **visitas**, não médicos distintos. O texto descreve a régua da
+  tela de Segmentação, não a da própria tela.
+- "Média de visitas por dia útil trabalhado" — o divisor são os dias
+  **trabalhados**, que não é o mesmo que dias úteis do ciclo.
+- Uns textos citam a fórmula entre parênteses, outros não. Vale escolher um
+  padrão.
+
+Referência: a `Régua dos Indicadores` (documento de 18/08) tem a descrição
+conferida de cada métrica.
+
+---
+
+## 4. Revisar os cálculos
+
+Revisão geral das fórmulas por trás dos indicadores — confirmar com a área de
+negócio se cada uma responde à pergunta certa.
+
+**Já mapeado e aguardando validação:**
+- **Duas réguas de cobertura.** Visão Executiva conta visitas sobre o painel do
+  ciclo; Visitação × Segmentação conta médicos sobre o painel de hoje. Ciclo 09
+  dá 84,5% e 80,4%. Ambas corretas, mas confirmar se as duas devem existir.
+- **MDV divide por dias trabalhados**, então faltar melhora o indicador.
+  Confirmar se é o comportamento desejado.
+- **Regra de classificação do "Indicativo"** (manter / atenção / ação) — o corte
+  é 10% acima da MDV necessária. A coluna está oculta desde 18/08 justamente
+  para essa validação.
+- **Meta de 90% ajustada por dias úteis** (`90% × DU ÷ 15`).
+- **Painel travado em 180** quando passa de 190 — hoje nunca dispara, mas a
+  regra está no código.
+- **Insights ignora o ciclo 01** por ser atípico.
+
+---
+
+## 5. Target List não desconsidera setores "não considerar" — ✅ APLICADO 18/08
+
+**Tela:** Médicos não Visitados (`/target-list`)
+
+**Verificado em 18/08: ela NÃO filtra.** A consulta usa `metas_ciclo` apenas
+para descobrir quais são os 3 ciclos mais recentes; não há nenhuma condição de
+`considerar` no filtro. Médicos de setor marcado como não considerar entram na
+lista normalmente.
+
+**Impacto medido** (janela 202607–202609):
+
+| | |
+|---|---:|
+| Médicos na lista | 457 |
+| Vindos de setor "não considerar" | **179 (39%)** |
+
+Os 5 setores envolvidos:
+
+| Setor | Representante | Na lista | `considerar` por ciclo (07/08/09) |
+|---|---|---:|---|
+| RO_PORTOVELHO | Mary Anny Alexandre | 69 | sim / não / não |
+| SPC_ZONALESTE | Aleksandra Furtado | 55 | não / não / sim |
+| PR_CTBA_1 | Andrew Andrade Vaz | 33 | não / não / sim |
+| RS_CAXIAS | Jenice Biegelmeyer | 20 | sim / não / não |
+| SC_FLORIPA_BC | Raphael Carvalho | 2 | sim / sim / não |
+
+**Decisão tomada (18/08):** passa a filtrar, pelo critério de **maioria** — o
+setor sai se estiver "não considerar" na maior parte dos ciclos da janela.
+Aplicado tanto na lista quanto no total de ativos exibido ao lado, para os dois
+falarem da mesma base. Resultado: a lista foi de **457 para 280 médicos**,
+saindo PR_CTBA_1, RO_PORTOVELHO, RS_CAXIAS e SPC_ZONALESTE. O SC_FLORIPA_BC
+continua, por ter 2 ciclos "sim" contra 1 "não".
+
+**Ainda em aberto:**
+- **O `considerar` varia entre os ciclos da janela.** Nenhum dos 5 setores é
+  "não considerar" nos três. Então a regra precisa definir: exclui se estiver
+  fora em **algum** ciclo, na **maioria**, ou só no **mais recente**? A escolha
+  muda bastante o resultado — pelo critério "algum ciclo" saem 179 médicos;
+  pelo "mais recente" sairiam bem menos.
+- Vale conferir também se o mesmo vale para outras telas que listam médicos.
+
+---
+
+## 6. Revisar as regras de negócio com a gerência
+
+Várias regras hoje estão implementadas por decisão técnica ou por combinação
+pontual, sem validação formal com a gerência. Elas mudam número em tela, então
+vale uma rodada de aprovação antes de virarem referência oficial.
+
+**Regras a validar:**
+
+| Regra | Como está hoje | Pergunta |
+|---|---|---|
+| Setor "não considerar" na Target List | sai pela **maioria** dos 3 ciclos (18/08) | maioria é o corte certo, ou deveria ser o ciclo mais recente? |
+| Duas réguas de cobertura | Visão Executiva por visita/painel do ciclo; Segmentação por médico/painel de hoje | as duas devem coexistir? qual é a oficial? |
+| MDV | divide por dias trabalhados | faltar melhora o indicador — é o desejado? |
+| Indicativo (manter/atenção/ação) | corte em 10% acima da MDV necessária | o corte é esse? a coluna está oculta desde 18/08 aguardando isso |
+| Meta de cobertura | 90% ajustado por dias úteis (`90% × DU ÷ 15`) | confirmar a base de 90% e o ajuste proporcional |
+| Painel ideal | reduzido na origem (~180), com teto de 190 no código | confirmar o teto e quem define o painel ideal |
+| Ciclo 01 nos Insights | excluído por ser atípico | manter a exclusão? vale para o próximo ano? |
+| Potencial 0 | fora dos cards de potencial (448 médicos) | manter fora, ou criar card "não classificado"? |
+| Janela da Target List | 3 ciclos sem visita | 3 é o certo para caracterizar abandono? |
+
+**Sugestão:** levar a `Régua dos Indicadores` (documento de 18/08) para a
+reunião — ela tem cada fórmula descrita em linguagem de negócio, o que evita
+discutir código.
+
+---
+
+## 7. Senha individual para cada usuário — ✅ APLICADO 21/08
+
+**Tela:** Login (`/login`) e barreira de primeiro acesso.
+
+**O que foi feito (21/08, commit `c69c6b2`):** caminho **A**, na versão
+obrigatória. `PrimeiroAcessoGate` é uma barreira que cobre qualquer tela depois
+do login enquanto o usuário não trocar a senha inicial. A marca `senha_alterada`
+fica no perfil do usuário no Supabase, então vale em qualquer dispositivo e não
+volta depois de sair e entrar. Senha e marca são gravadas na mesma chamada: se
+falhar, nada é aplicado pela metade.
+
+Exigências da senha, mostradas em lista viva enquanto a pessoa digita: 8
+caracteres, 1 maiúscula, 1 número e 1 símbolo. As expressões tratam letra
+acentuada como letra — sem isso, "Ção" contaria o "Ç" como símbolo e "ção"
+passaria como se tivesse maiúscula.
+
+**Testado de ponta a ponta em 21/08** com usuário novo: login → barreira →
+senha definida → marca gravada, sem erro no log de autenticação. Perfil ficou
+`{"email_verified": true, "senha_alterada": true}`, sem sobrescrever o que já
+existia.
+
+**Decisões tomadas no caminho:**
+- Barreira obrigatória, não opcional, e não um botão na barra lateral — a
+  troca precisa acontecer, não depender de alguém lembrar.
+- Recuperação de senha continua manual (item B abaixo, não feito): o rodapé do
+  login leva a um e-mail para o suporte.
+- A conta do Victor recebeu a marca **sem** trocar a senha, a pedido — ela segue
+  com a senha inicial compartilhada.
+- **Cadastro público fechado no Supabase (21/08).** Estava aberto: dava para
+  criar conta batendo direto no serviço de autenticação, sem passar pela tela de
+  login. Confirmação de e-mail era a única trava, e o envio funcionava.
+
+**Ainda em aberto:**
+- Proteção de senha vazada segue **desligada** (ver Pendências técnicas). As
+  regras de composição não pegam senha previsível: `Exeltis@2026` cumpre as
+  quatro. As duas coisas somam, não se substituem.
+- Caminho **B** (autoatendimento de "esqueci a senha") não foi feito — depende
+  de SMTP configurado.
+
+---
+
+**Contexto de quando o item foi criado:** todos os usuários entravam com a
+**mesma senha** (`@Exeltis123`), definida na liberação de 18/08. Não havia como
+trocá-la: a tela de login está com `showLinks={false}`, que remove "Esqueci a
+senha" e "Cadastre-se", e não existia tela de perfil. Só o administrador
+trocava, pelo painel do Supabase, uma conta por vez.
+
+**Consequências:**
+- A senha compartilhada fica na caixa de entrada de todos, indefinidamente.
+- Sem responsabilização individual: o registro de acesso não distingue quem foi.
+- Quando alguém sair da empresa, é preciso trocar a senha de **todos**.
+- Combina mal com o fato de qualquer usuário logado enxergar o painel completo
+  de médicos (nome, CRM, endereço).
+
+**Dois caminhos, e um é bem mais barato:**
+
+**A) Tela de "alterar senha" para quem já está logado.** Não precisa de e-mail —
+o usuário já está autenticado, então basta uma tela simples que grava a nova
+senha. Resolve o essencial: cada um passa a ter a sua. O comentário no código
+diz que "ambos exigiriam envio de e-mail", mas isso vale para a recuperação,
+não para a troca com o usuário logado.
+
+**B) Recuperação de senha ("Esqueci a senha").** Aí sim precisa de envio de
+e-mail configurado no Supabase Auth — servidor SMTP próprio ou o serviço padrão,
+que tem limite de envios. Necessário se alguém esquecer a senha e não puder
+esperar o administrador.
+
+**Sugestão:** começar pela A, que é pequena e já elimina a senha compartilhada.
+A B entra quando o número de usuários crescer e o suporte manual pesar.
+
+**Decidido em 21/08:** feita a A, obrigatória no primeiro acesso. Senha forte
+por regra de composição, não pela verificação de senha vazada — essa continua
+desligada.
+
+---
+
+## 8. Documentação do código e do banco
+
+**Escopo:** o projeto inteiro.
+
+Hoje não existe documentação de entrada. Quem chegar no projeto — ou você mesmo
+daqui a seis meses — não tem por onde começar.
+
+**O que existe hoje:**
+
+| Documento | Estado |
+|---|---|
+| `README.md` | **boilerplate do AI Studio**, nunca editado. Manda configurar `GEMINI_API_KEY`, que o projeto não usa |
+| `Régua dos Indicadores` (18/08) | bom, mas é de negócio: explica o que cada número significa, não como o sistema funciona |
+| `MELHORIAS.md` | este arquivo — backlog, não documentação |
+| `src/lib/db/schema.ts` | espelho do banco, com comentário em cada decisão não óbvia. É hoje a melhor fonte sobre o modelo |
+| `drizzle/` | **duas migrations defasadas.** Descrevem uma `fato_diario` que não existe mais, colunas que nunca foram aplicadas e nenhuma das FKs atuais. Enganam quem confiar nelas |
+
+**O que falta, em ordem de utilidade:**
+
+1. **README de verdade.** Como rodar, quais variáveis de ambiente, como buildar,
+   onde a Vercel publica, onde fica o Supabase. Hoje o arquivo aponta para o
+   lugar errado, que é pior que não ter.
+2. **Documentação do banco.** Cada tabela: para que serve, quem alimenta, com
+   que frequência, e o que quebra se ficar desatualizada. As armadilhas
+   precisam estar escritas, não descobertas de novo — `fato_segmentacao` sem
+   ciclo reescrevendo o passado, `fato_ciclo_resumo` divergindo de `fato_abonos`
+   de propósito, `metas_ciclo` sem dimensão de segmentação, o índice em
+   `fato_amostras.id_visita` que existe para o DELETE não estourar timeout.
+3. **Documentação das views e RPCs.** `ciclos_fechados`, `fato_visitas_fechado` e
+   `get_cobertura_dinamica` carregam regra de negócio e não aparecem em
+   `schema.ts`. Quem lê só o código não sabe que existem.
+4. **Mapa das telas.** Cada tela, de quais tabelas lê e qual regra aplica. A
+   `Régua dos Indicadores` já cobre o lado do negócio; falta ligar cada
+   indicador ao caminho no código.
+5. **Como fazer as cargas.** Enquanto a Central de Cargas não grava, a carga é
+   script manual e o procedimento só existe na cabeça de quem fez.
+
+**A decidir quando formos implementar:**
+- Documento único ou uma pasta `docs/` separada por assunto?
+- As migrations defasadas: apagar, ou regerar a partir do banco real? Deixar
+  como estão é a pior opção — parecem verdade e não são.
+- O `schema.ts` continua sendo a fonte da verdade do modelo, com a documentação
+  apontando para ele, ou a descrição das tabelas passa a viver no documento?
+- Vale gerar diagrama de relacionamento, ou tabela em texto resolve?
+
+---
+
 ---
 
 # Pendências técnicas
 
-Levantadas durante o trabalho de 14 a 18/08/2026. Não são pedidos novos — são
+Levantadas durante o trabalho de 14 a 21/08/2026. Não são pedidos novos — são
 coisas que já existem e ficaram em aberto. Ordenadas por risco.
 
 ## Dados de segmentação
@@ -94,7 +341,16 @@ coisas que já existem e ficaram em aberto. Ordenadas por risco.
   manualmente. Revisitar antes de abrir para a força de vendas: exigiria
   política por território.
 - **Proteção de senha vazada desligada** no Supabase Auth. Só pode ser ligada no
-  dashboard, não por código.
+  dashboard, não por código. Ficou mais relevante depois de 21/08, quando os
+  usuários passaram a escolher a própria senha: as regras de composição não
+  pegam senha previsível — `Exeltis@2026` cumpre as quatro. O componente já tem
+  a mensagem de erro traduzida para esse caso, ela só nunca aparece.
+- **Cadastro público — resolvido em 21/08.** Estava aberto: o serviço de
+  autenticação aceitava criação de conta batendo direto nele, sem passar pela
+  tela de login, com e-mail de qualquer domínio. A única trava era a confirmação
+  por e-mail, e o envio funcionava. Fechado no painel do Supabase
+  (`disable_signup`). A Central de Cargas não estava exposta por esse caminho —
+  ela tem lista de e-mails autorizados.
 - **Relatório da colega é público.** `public/relatorio-colega/` é servido sem
   autenticação e o `tela-4.html` tem a senha `Exeltis2026` em texto claro no
   código-fonte. Decisão de manter assim por ora, por não ser possível mexer nos
@@ -133,6 +389,21 @@ usuários, em linguagem de negócio — o que mudou na tela, o que a pessoa vai
 notar de diferente e, quando for o caso, o que ela precisa fazer.
 
 As notas ficam em `NOTAS-DE-ATUALIZACAO.md`.
+
+**Pendente:** o arquivo ainda não existe, e a nota da rodada de 18 a 21/08 não
+foi escrita. O que ela precisa cobrir:
+
+- **Tela de senha no primeiro acesso** — é o único item que exige ação do
+  usuário, então abre a nota.
+- **Médicos não Visitados: 457 → 280.** Passou a desconsiderar setores marcados
+  como "não considerar". O usuário vai notar a lista encolher e precisa saber
+  por quê, senão parece perda de dado.
+- **Coluna "Indicativo" oculta** na Análise de Ciclo, em validação.
+- **Cores padronizadas por estrutura** nos três gráficos, e o card de
+  informações passou a seguir as colunas.
+- **Card de resumo removido** dos Insights.
+- **Relatório de Ranking (tela-3) atualizado** pela área: período Jun/25, filtro
+  Top 6 marcas, expansão por segmento e card de zero coroas.
 
 <!--
 Para acrescentar um item, copie o bloco abaixo:

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/card";
 import {
@@ -18,7 +18,68 @@ import {
 } from 'recharts';
 import { Package, Users, Percent, Shield, HelpCircle, UserCheck } from 'lucide-react';
 import { DashboardFilters } from '@/src/components/dashboard/DashboardFilters';
-import { getAvailableSetores, getAmostrasData } from '@/src/app/actions';
+import {
+  getAvailableSetores,
+  getAmostrasData,
+  getAmostrasRecortePorSegmentacao,
+  getAmostrasRecortePorClassificacao,
+  type MedicoAmostra,
+} from '@/src/app/actions';
+import { RecorteModal, type ColunaRecorte } from '@/src/components/recorte/RecorteModal';
+import { SEGMENTACOES, slug } from '@/src/lib/recorte/formato';
+import { ListFilter } from 'lucide-react';
+
+// Colunas dos recortes. O gráfico de segmentação mostra a coluna Segmentação;
+// o de classificação não, porque lá a linha é o médico e a segmentação
+// dependeria da marca entregue — informação que aquele gráfico não usa.
+const COLUNAS_BASE: ColunaRecorte<MedicoAmostra>[] = [
+  { chave: 'crmuf',    label: 'CRM/UF',        valor: (l) => l.crmuf },
+  { chave: 'nome',     label: 'Nome',          valor: (l) => l.nome_medico },
+  { chave: 'setor',    label: 'Setor',         valor: (l) => l.nome_setor },
+  { chave: 'distrito', label: 'Distrito',      valor: (l) => l.nome_distrito },
+  { chave: 'class',    label: 'Classificação', valor: (l) => l.classificacao ?? '—' },
+];
+
+const COLUNAS_METRICAS: ColunaRecorte<MedicoAmostra>[] = [
+  { chave: 'amostras', label: 'Amostras', className: 'text-right', valor: (l) => l.amostras },
+  { chave: 'visitas',  label: 'Visitas',  className: 'text-right', valor: (l) => l.visitas },
+];
+
+// Endereço: só no Excel, para o trabalho de campo. Fora da tabela da tela,
+// que já disputa largura. Entra por último nas duas exportações.
+const COLUNAS_ENDERECO: ColunaRecorte<MedicoAmostra>[] = [
+  { chave: 'estado',    label: 'Estado',    somenteExport: true, valor: (l) => l.estado    ?? '' },
+  { chave: 'municipio', label: 'Município', somenteExport: true, valor: (l) => l.municipio ?? '' },
+  { chave: 'bairro',    label: 'Bairro',    somenteExport: true, valor: (l) => l.bairro    ?? '' },
+  { chave: 'cep',       label: 'CEP',       somenteExport: true, valor: (l) => l.cep       ?? '' },
+];
+
+const COLUNAS_SEG: ColunaRecorte<MedicoAmostra>[] = [
+  ...COLUNAS_BASE,
+  { chave: 'segmentacao', label: 'Segmentação', valor: (l) => l.segmentacao },
+  ...COLUNAS_METRICAS,
+  ...COLUNAS_ENDERECO,
+];
+
+const COLUNAS_CLASS: ColunaRecorte<MedicoAmostra>[] = [
+  ...COLUNAS_BASE,
+  ...COLUNAS_METRICAS,
+  ...COLUNAS_ENDERECO,
+];
+
+// Filtros vigentes por extenso, para o cabeçalho do modal e do arquivo.
+function descreverRecorteAmostras(
+  ciclo: string, distrito: string, setor: string, produto: string, dimensao: string,
+): string {
+  const partes: string[] = [];
+  partes.push(ciclo === 'Todos' ? 'Todos os ciclos' : `Ciclo ${ciclo}`);
+  if (distrito !== 'Todos') partes.push(`Distrito ${distrito}`);
+  if (setor !== 'Todos') partes.push(`Setor ${setor}`);
+  if (produto !== 'Todos') partes.push(`Produto ${produto}`);
+  if (dimensao !== 'Todas') partes.push(dimensao);
+  return partes.join(' · ');
+}
+
 import { useLayout } from '@/src/context/LayoutContext';
 
 const CustomLegend = ({ payload, highlighted, onToggle }: any) => {
@@ -171,6 +232,14 @@ function AlocacaoDeRecursosContent() {
   const [segHighlight, setSegHighlight]     = useState<Set<string>>(new Set());
   const [classHighlight, setClassHighlight] = useState<Set<string>>(new Set());
 
+  // Recortes detalhados dos dois gráficos. Estados separados: são bases
+  // diferentes (entregas × painel), então nunca abrem juntos.
+  const [recSegAberto, setRecSegAberto]     = useState(false);
+  const [recSegFiltro, setRecSegFiltro]     = useState('Todas');
+  const [recClassAberto, setRecClassAberto] = useState(false);
+  const [recClassFiltro, setRecClassFiltro] = useState('Todas');
+
+
   const makeToggle =
     (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (label: string) =>
       setter((prev) => {
@@ -191,6 +260,46 @@ function AlocacaoDeRecursosContent() {
   const setor       = searchParams.get('setor')     || 'Todos';
   const ciclo       = searchParams.get('ciclo')     || 'Todos';
   const produto     = searchParams.get('produto')   || 'Todos';
+
+  // --- Recorte do gráfico de segmentação -----------------------------------
+  const carregarRecSeg = useCallback(
+    (p: { busca: string; limit: number; offset: number }) =>
+      getAmostrasRecortePorSegmentacao(distrito, setor, ciclo, produto, {
+        segmentacao: recSegFiltro, busca: p.busca, limit: p.limit, offset: p.offset,
+      }),
+    [distrito, setor, ciclo, produto, recSegFiltro],
+  );
+  const exportarRecSeg = useCallback(
+    async (p: { busca: string }) => {
+      // limit 0 = sem paginação: o arquivo leva o recorte inteiro.
+      const r = await getAmostrasRecortePorSegmentacao(distrito, setor, ciclo, produto, {
+        segmentacao: recSegFiltro, busca: p.busca, limit: 0,
+      });
+      return r.linhas;
+    },
+    [distrito, setor, ciclo, produto, recSegFiltro],
+  );
+
+  // --- Recorte do gráfico de classificação ---------------------------------
+  const carregarRecClass = useCallback(
+    (p: { busca: string; limit: number; offset: number }) =>
+      getAmostrasRecortePorClassificacao(distrito, setor, ciclo, produto, {
+        classificacao: recClassFiltro, busca: p.busca, limit: p.limit, offset: p.offset,
+      }),
+    [distrito, setor, ciclo, produto, recClassFiltro],
+  );
+  const exportarRecClass = useCallback(
+    async (p: { busca: string }) => {
+      const r = await getAmostrasRecortePorClassificacao(distrito, setor, ciclo, produto, {
+        classificacao: recClassFiltro, busca: p.busca, limit: 0,
+      });
+      return r.linhas;
+    },
+    [distrito, setor, ciclo, produto, recClassFiltro],
+  );
+
+  const descSeg = descreverRecorteAmostras(ciclo, distrito, setor, produto, recSegFiltro);
+  const descClass = descreverRecorteAmostras(ciclo, distrito, setor, produto, recClassFiltro);
 
   const { setHeaderState } = useLayout();
 
@@ -323,12 +432,25 @@ function AlocacaoDeRecursosContent() {
         {/* Chart 1: Por Segmentação */}
         <Card className="border-slate-200 bg-white shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-slate-900">
-              Média de Amostras vs. Médicos por Segmentação
-            </CardTitle>
-            <CardDescription className="text-slate-500">
-              Barras: nº de médicos por segmentação · Linha: média de amostras entregues
-            </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg font-semibold text-slate-900">
+                  Média de Amostras vs. Médicos por Segmentação
+                </CardTitle>
+                <CardDescription className="text-slate-500">
+                  Barras: nº de médicos por segmentação · Linha: média de amostras entregues
+                </CardDescription>
+              </div>
+              <button
+                onClick={() => setRecSegAberto(true)}
+                disabled={loading}
+                title="Ver a lista de médicos deste recorte"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ListFilter className="h-3.5 w-3.5" />
+                Detalhar
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="h-[400px] w-full mt-4 relative">
@@ -424,12 +546,25 @@ function AlocacaoDeRecursosContent() {
         {/* Chart 2: Por Classificação Médica */}
         <Card className="border-slate-200 bg-white shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-slate-900">
-              Média de Amostras vs. Médicos por Classificação Médica
-            </CardTitle>
-            <CardDescription className="text-slate-500">
-              Barras: nº de médicos por classificação · Linha: média de amostras entregues
-            </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg font-semibold text-slate-900">
+                  Média de Amostras vs. Médicos por Classificação Médica
+                </CardTitle>
+                <CardDescription className="text-slate-500">
+                  Barras: nº de médicos por classificação · Linha: média de amostras entregues
+                </CardDescription>
+              </div>
+              <button
+                onClick={() => setRecClassAberto(true)}
+                disabled={loading}
+                title="Ver a lista de médicos deste recorte"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ListFilter className="h-3.5 w-3.5" />
+                Detalhar
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="h-[400px] w-full mt-4 relative">
@@ -523,6 +658,58 @@ function AlocacaoDeRecursosContent() {
         </Card>
 
       </div>
+
+      <RecorteModal<MedicoAmostra>
+        aberto={recSegAberto}
+        onFechar={() => setRecSegAberto(false)}
+        tela="Entrega de Amostras · por Segmentação"
+        titulo="Médicos que receberam amostra"
+        recorte={descSeg}
+        colunas={COLUNAS_SEG}
+        versao={`${recSegFiltro}|${distrito}|${setor}|${ciclo}|${produto}`}
+        carregar={carregarRecSeg}
+        exportar={exportarRecSeg}
+        nomeArquivo={`amostras-segmentacao_${slug(descSeg)}`}
+        filtros={
+          <select
+            value={recSegFiltro}
+            onChange={(e) => setRecSegFiltro(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500"
+          >
+            <option value="Todas">Todas as segmentações</option>
+            {SEGMENTACOES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        }
+      />
+
+      <RecorteModal<MedicoAmostra>
+        aberto={recClassAberto}
+        onFechar={() => setRecClassAberto(false)}
+        tela="Entrega de Amostras · por Classificação"
+        titulo="Médicos que receberam amostra"
+        recorte={descClass}
+        colunas={COLUNAS_CLASS}
+        versao={`${recClassFiltro}|${distrito}|${setor}|${ciclo}|${produto}`}
+        carregar={carregarRecClass}
+        exportar={exportarRecClass}
+        nomeArquivo={`amostras-classificacao_${slug(descClass)}`}
+        filtros={
+          <select
+            value={recClassFiltro}
+            onChange={(e) => setRecClassFiltro(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500"
+          >
+            <option value="Todas">Todas as classificações</option>
+            {/* Opções vêm do próprio gráfico: garante que a lista do filtro é
+                exatamente a das barras, sem duplicar a regra de ordenação. */}
+            {classData.map((c) => (
+              <option key={c.classificacao} value={c.classificacao}>{c.classificacao}</option>
+            ))}
+          </select>
+        }
+      />
     </div>
   );
 }

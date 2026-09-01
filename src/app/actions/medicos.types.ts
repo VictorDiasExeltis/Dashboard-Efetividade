@@ -17,4 +17,10 @@ export interface MedicoNaoVisitado {
   especialidade: string | null;
   nome_setor:    string | null;
   nome_distrito: string | null;
+  // Endereço — vai só para o Excel exportado, não para a tabela na tela.
+  // Preenchido em 100% dos médicos ativos (conferido em 31/08/2026).
+  estado:        string | null;
+  municipio:     string | null;
+  bairro:        string | null;
+  cep:           string | null;
 }
