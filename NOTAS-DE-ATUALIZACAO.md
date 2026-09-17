@@ -19,6 +19,15 @@ O título agora diz **"Acesso ao HUB de IM"**, no lugar de "Acesso ao Sistema",
 para deixar claro logo na porta que ali dentro estão as duas coisas: o
 Dashboard de Efetividade e os relatórios de demanda e prescrição.
 
+### A aba do navegador agora identifica o sistema
+
+Antes, quem deixava o sistema aberto em uma aba via só "SFE Dashboard" e um
+ícone em branco, difícil de achar no meio de várias abas. Agora a aba mostra
+**"HUB de Inteligência de Mercado"** e a borboleta da Exeltis.
+
+Só muda o que aparece no navegador — nenhuma tela, número ou acesso foi
+alterado.
+
 ---
 
 ## 17/09/2026

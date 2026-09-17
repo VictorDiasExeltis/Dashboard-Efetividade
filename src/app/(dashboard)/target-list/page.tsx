@@ -2,7 +2,7 @@ import React, { Suspense } from 'react';
 import { TargetListClient } from '@/src/components/dashboard/TargetListClient';
 
 export const metadata = {
-  title: 'Médicos não Visitados - SFE Dashboard',
+  title: 'Médicos não Visitados - HUB de Inteligência de Mercado',
   description: 'Lista de médicos alvo que não receberam visitas.',
 };
 

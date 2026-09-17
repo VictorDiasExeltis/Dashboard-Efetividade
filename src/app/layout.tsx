@@ -3,7 +3,7 @@ import "./globals.css";
 import { PrimeiroAcessoGate } from "@/src/components/conta/PrimeiroAcessoGate";
 
 export const metadata: Metadata = {
-  title: "SFE Dashboard",
+  title: "HUB de Inteligência de Mercado",
   description: "Dashboard de Efetividade de Força de Vendas",
 };
 
