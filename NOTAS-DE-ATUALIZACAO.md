@@ -5,6 +5,22 @@ usuários. Mais recente no topo.
 
 ---
 
+## 17/09/2026 — tela de entrada
+
+### A tela de login mudou de cara
+
+Ao entrar no sistema você vai encontrar uma tela diferente: fundo azul da
+marca, a identidade da Exeltis ao lado e o formulário à direita.
+
+**O acesso não mudou.** Mesmo e-mail, mesma senha, mesmo caminho depois de
+entrar. Não é preciso cadastrar nada de novo nem redefinir senha.
+
+O título agora diz **"Acesso ao HUB de IM"**, no lugar de "Acesso ao Sistema",
+para deixar claro logo na porta que ali dentro estão as duas coisas: o
+Dashboard de Efetividade e os relatórios de demanda e prescrição.
+
+---
+
 ## 17/09/2026
 
 ### Amostras: filtrar por classificação médica
