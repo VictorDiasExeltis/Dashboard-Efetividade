@@ -11,7 +11,7 @@
 export { getExecutiveMetrics, getAvailableSetores }           from './actions/executive';
 export { getClassificacoes, getSegmentacaoData, getVisitadosPorPotencial, getSegmentacaoRecorte } from './actions/segmentacao';
 export type { PotencialVisitacao, MedicoRecorte, RecorteSegmentacao, FiltrosRecorte } from './actions/segmentacao';
-export { getAmostrasData, getAmostrasRecortePorSegmentacao, getAmostrasRecortePorClassificacao } from './actions/amostras';
+export { getAmostrasData, getAmostrasPorSegmentacao, getAmostrasRecortePorSegmentacao, getAmostrasRecortePorClassificacao } from './actions/amostras';
 export type { MedicoAmostra, RecorteAmostras, FiltrosRecorteAmostras } from './actions/amostras';
 export { getMedicosNaoVisitados, getTotalMedicosAtivosTerritorio } from './actions/medicos';
 export { getSetoresPorDistrito, getDistritos, getCiclos, getProdutos } from './actions/shared';

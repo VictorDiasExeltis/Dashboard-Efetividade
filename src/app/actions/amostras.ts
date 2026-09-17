@@ -267,12 +267,20 @@ export async function getAmostrasRecortePorSegmentacao(
   ciclo: string = 'Todos',
   produto: string = 'Todos',
   filtros: FiltrosRecorteAmostras = {},
+  // Mesmo recorte de classificação do card. Precisa entrar aqui também, senão
+  // o modal listaria um conjunto diferente do que o gráfico está mostrando.
+  classificacao: string = 'Todas',
 ): Promise<RecorteAmostras> {
   await requireUser();
   if (!db) return { linhas: [], total: 0, totalGeral: 0 };
 
   try {
     const p = predicadosAmostras(distrito, setor, ciclo, produto);
+
+    const listaClass = classificacao.split(',').map((c) => c.trim()).filter(Boolean);
+    const classWhere = classificacao !== 'Todas' && listaClass.length > 0
+      ? sql`AND TRIM(m.classificacao) IN (${sql.join(listaClass.map((c) => sql`${c}`), sql`, `)})`
+      : sql``;
 
     const porLinha = sql`
       SELECT
@@ -299,6 +307,7 @@ export async function getAmostrasRecortePorSegmentacao(
         ${p.territorioFiltro}
         ${p.cicloFiltro}
         ${p.produtoFiltro}
+        ${classWhere}
       GROUP BY v.crmuf, COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
     `;
 
@@ -432,4 +441,77 @@ async function paginarRecorte(
     total,
     totalGeral,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Gráfico de segmentação com filtro próprio de classificação
+// ---------------------------------------------------------------------------
+
+// Mesma série do `bySegmentacao` de getAmostrasData, mas aceita um recorte de
+// classificação médica. O filtro é DO CARD, não da tela: aplicá-lo globalmente
+// deixaria o gráfico vizinho — que agrupa POR classificação — com uma barra só.
+//
+// `classificacao` aceita CSV ("MÉDICO(A) TH,MÉDICO(A) PRÉ NATAL") para o
+// Ctrl+clique do CustomDropdown, igual aos demais filtros do projeto.
+export async function getAmostrasPorSegmentacao(
+  distrito: string = 'Todos',
+  setor: string = 'Todos',
+  ciclo: string = 'Todos',
+  produto: string = 'Todos',
+  classificacao: string = 'Todas',
+): Promise<Array<{ segmentacao: string; medicos: number; mediaAmostras: number }>> {
+  await requireUser();
+  if (!db) return [];
+
+  try {
+    const p = predicadosAmostras(distrito, setor, ciclo, produto);
+
+    const lista = classificacao.split(',').map((c) => c.trim()).filter(Boolean);
+    const filtrando = classificacao !== 'Todas' && lista.length > 0;
+
+    // A consulta original não junta dim_medicos — ela parte da entrega. O JOIN
+    // só entra quando há filtro, para não mudar o plano nem o resultado quando
+    // não há: médico sem cadastro sairia num INNER JOIN incondicional.
+    const medicoJoin = filtrando
+      ? sql`INNER JOIN dim_medicos m ON m.crmuf = v.crmuf
+            AND TRIM(m.classificacao) IN (${sql.join(lista.map((c) => sql`${c}`), sql`, `)})`
+      : sql``;
+
+    const result = await db.execute(sql`
+      SELECT
+        COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO') AS segmentacao,
+        COUNT(DISTINCT v.crmuf)::integer AS total_medicos,
+        COALESCE(
+          SUM(a.quantidade)::numeric / NULLIF(COUNT(DISTINCT v.crmuf), 0),
+          0
+        )::numeric AS media_amostras
+      FROM fato_amostras a
+      INNER JOIN fato_visitas  v ON v.id_visita = a.id_visita
+      INNER JOIN dim_produtos  p ON p.id_produto = a.id_produto
+      ${medicoJoin}
+      LEFT  JOIN fato_segmentacao s
+        ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca
+      WHERE TRUE
+        ${p.territorioFiltro}
+        ${p.cicloFiltro}
+        ${p.produtoFiltro}
+      GROUP BY COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
+      ORDER BY CASE COALESCE(s.segmentacao, 'SEM SEGMENTAÇÃO')
+        WHEN 'CONQUISTAR' THEN 1
+        WHEN 'PROTEGER'   THEN 2
+        WHEN 'MANTER'     THEN 3
+        WHEN 'OBSERVAR'   THEN 4
+        ELSE 5
+      END
+    `);
+
+    return (result as any[]).map((r) => ({
+      segmentacao: String(r.segmentacao),
+      medicos: Number(r.total_medicos) || 0,
+      mediaAmostras: Number(r.media_amostras) || 0,
+    }));
+  } catch (e) {
+    console.error('getAmostrasPorSegmentacao error:', e);
+    return [];
+  }
 }

@@ -78,7 +78,9 @@ function CustomChartLegend({ payload, highlighted, onToggle }: any) {
   );
 }
 
-// Tooltip do gráfico de barras (ciclo único). Depende de `shared={false}` no
+// Tooltip do gráfico de barras (ciclo único OU estrutura única). Serve aos dois
+// casos sem ajuste: mostra o rótulo do eixo X e o nome da série, seja "Ciclo 09
+// / MG/CO" ou "Ciclo 09 / Brasil". Depende de `shared={false}` no
 // <Tooltip>: com isso o Recharts entrega no payload APENAS a barra sob o cursor
 // (em vez de todas as séries do eixo X) e posiciona o card na própria barra,
 // já com flip automático perto das bordas. Não mexer no `shared` sem revisar
@@ -118,6 +120,33 @@ type CustomLineLabelProps = {
   width: number;
   formatValue: (v: number) => string;
 };
+
+// Rótulo do gráfico de BARRAS. Número na cor da estrutura com contorno branco:
+// as barras são coloridas e o grid é claro, então texto sem halo some sobre uma
+// e some sobre o outro. `paintOrder="stroke"` pinta o contorno ATRÁS do
+// preenchimento — sem isso o branco comeria o número por dentro.
+//
+// Só as barras usam isto. No gráfico de linhas há um rótulo por ciclo por série
+// e o halo deixaria a área poluída; lá segue o CustomLineLabel, com etiqueta.
+function BarValueLabel({ x, y, width, value, fill, formatValue }: any) {
+  if (value === undefined || value === null || x === undefined) return null;
+  return (
+    <text
+      x={Number(x) + Number(width) / 2}
+      y={Number(y) - 8}
+      textAnchor="middle"
+      fontSize={13}
+      fontWeight={700}
+      fill={fill}
+      stroke="#ffffff"
+      strokeWidth={3}
+      paintOrder="stroke"
+      style={{ strokeLinejoin: 'round' }}
+    >
+      {formatValue(Number(value))}
+    </text>
+  );
+}
 
 function CustomLineLabel({ x, y, value, stroke, width, formatValue }: CustomLineLabelProps) {
   if (value === undefined || value === null || x === undefined || y === undefined) return null;
@@ -205,6 +234,9 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
 
   const estrutura = searchParams.get('estrutura') || 'Distrito';
   const distritoFiltro = searchParams.get('distrito') || '';
+  // A RPC não recebe setor — ela devolve todos os setores do distrito. O
+  // recorte de um setor específico é feito aqui, sobre o que voltou.
+  const setorFiltro = searchParams.get('setor') || '';
   // Filtro de ciclo vem do header (CSV via Ctrl+clique). Vazio = todos os ciclos.
   const cicloFiltroRaw = searchParams.get('ciclo') || '';
   const ciclosSelecionados = cicloFiltroRaw
@@ -221,7 +253,7 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
   // ficar apontando para uma série que não existe mais.
   useEffect(() => {
     setHighlighted(new Set());
-  }, [estrutura, distritoFiltro]);
+  }, [estrutura, distritoFiltro, setorFiltro]);
 
   async function fetchDados() {
     if (estrutura === 'Setor' && (!distritoFiltro || distritoFiltro === 'Todos')) {
@@ -250,7 +282,12 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
         return;
       }
 
-      const rows = data as Array<{ ciclo: string; label: string;[k: string]: any }>;
+      const todasAsLinhas = data as Array<{ ciclo: string; label: string;[k: string]: any }>;
+      // Recorta ao setor escolhido, quando há um. Sem isso o gráfico mostrava
+      // todos os setores do distrito mesmo com um setor filtrado no topo.
+      const rows = setorFiltro && setorFiltro !== 'Todos'
+        ? todasAsLinhas.filter((r) => r.label === setorFiltro)
+        : todasAsLinhas;
       const uniqueLabels = Array.from(new Set(rows.map((r) => r.label))).sort();
       const cicloSet = new Set(ciclosSelecionados);
       const uniqueCiclos = Array.from(new Set(rows.map((r) => r.ciclo)))
@@ -392,9 +429,17 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
         <div className="h-[400px] w-full mt-4">
           {mounted && (
             <ResponsiveContainer width="100%" height="100%">
-              {dados.length === 1 ? (
-                // Um único ciclo: barras (uma por série) — evita o "ponto
-                // flutuante" que o LineChart produz quando só há 1 X.
+              {dados.length === 1 || series.length === 1 ? (
+                // Vira barras quando qualquer um dos eixos colapsa para um só:
+                //
+                //   1 ciclo    -> uma barra por estrutura (o LineChart daria um
+                //                 "ponto flutuante", sem linha para desenhar)
+                //   1 estrutura -> uma barra por ciclo (a linha única não
+                //                 compara nada; a barra lê melhor a evolução)
+                //
+                // Acontece ao filtrar Brasil, um distrito ou um setor. Nos dois
+                // casos o mesmo BarChart serve: ele desenha uma barra por ponto
+                // de `dados` para cada série, e sobra exatamente um dos dois.
                 <BarChart data={dados} margin={{ top: 20, right: 30, left: 30, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.grid} />
                   <XAxis
@@ -458,11 +503,13 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                         {showLabels && isActive(label) && (
                           <LabelList
                             dataKey={label}
-                            position="top"
-                            formatter={(v: any) => config.labelFormatValue(Number(v))}
-                            fill={color}
-                            fontSize={11}
-                            fontWeight={700}
+                            content={(props: any) => (
+                              <BarValueLabel
+                                {...props}
+                                fill={color}
+                                formatValue={config.labelFormatValue}
+                              />
+                            )}
                           />
                         )}
                       </Bar>

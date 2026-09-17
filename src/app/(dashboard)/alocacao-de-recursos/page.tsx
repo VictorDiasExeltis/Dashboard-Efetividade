@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/card";
 import {
@@ -21,13 +21,16 @@ import { DashboardFilters } from '@/src/components/dashboard/DashboardFilters';
 import {
   getAvailableSetores,
   getAmostrasData,
+  getAmostrasPorSegmentacao,
   getAmostrasRecortePorSegmentacao,
   getAmostrasRecortePorClassificacao,
+  getClassificacoes,
   type MedicoAmostra,
 } from '@/src/app/actions';
 import { RecorteModal, type ColunaRecorte } from '@/src/components/recorte/RecorteModal';
 import { SEGMENTACOES, slug } from '@/src/lib/recorte/formato';
 import { ListFilter } from 'lucide-react';
+import { CustomDropdown } from '@/src/components/dashboard/CustomDropdown';
 
 // Colunas dos recortes. O gráfico de segmentação mostra a coluna Segmentação;
 // o de classificação não, porque lá a linha é o médico e a segmentação
@@ -236,6 +239,18 @@ function AlocacaoDeRecursosContent() {
   // diferentes (entregas × painel), então nunca abrem juntos.
   const [recSegAberto, setRecSegAberto]     = useState(false);
   const [recSegFiltro, setRecSegFiltro]     = useState('Todas');
+
+  // Filtro de classificação DO CARD de segmentação, não da tela. Global ele
+  // deixaria o gráfico vizinho — que agrupa por classificação — com uma barra
+  // só. Fica em estado local, fora da URL, porque é recorte de leitura.
+  // Aceita CSV ("MÉDICO(A) TH,MÉDICO(A) PRÉ NATAL") pelo Ctrl+clique.
+  const [classifSeg, setClassifSeg] = useState('Todas');
+  const [classificacoes, setClassificacoes] = useState<string[]>([]);
+  useEffect(() => { getClassificacoes().then(setClassificacoes); }, []);
+  const classificacaoOptions = useMemo(
+    () => classificacoes.map((c) => ({ label: c, value: c })),
+    [classificacoes],
+  );
   const [recClassAberto, setRecClassAberto] = useState(false);
   const [recClassFiltro, setRecClassFiltro] = useState('Todas');
 
@@ -266,18 +281,18 @@ function AlocacaoDeRecursosContent() {
     (p: { busca: string; limit: number; offset: number }) =>
       getAmostrasRecortePorSegmentacao(distrito, setor, ciclo, produto, {
         segmentacao: recSegFiltro, busca: p.busca, limit: p.limit, offset: p.offset,
-      }),
-    [distrito, setor, ciclo, produto, recSegFiltro],
+      }, classifSeg),
+    [distrito, setor, ciclo, produto, recSegFiltro, classifSeg],
   );
   const exportarRecSeg = useCallback(
     async (p: { busca: string }) => {
       // limit 0 = sem paginação: o arquivo leva o recorte inteiro.
       const r = await getAmostrasRecortePorSegmentacao(distrito, setor, ciclo, produto, {
         segmentacao: recSegFiltro, busca: p.busca, limit: 0,
-      });
+      }, classifSeg);
       return r.linhas;
     },
-    [distrito, setor, ciclo, produto, recSegFiltro],
+    [distrito, setor, ciclo, produto, recSegFiltro, classifSeg],
   );
 
   // --- Recorte do gráfico de classificação ---------------------------------
@@ -298,7 +313,8 @@ function AlocacaoDeRecursosContent() {
     [distrito, setor, ciclo, produto, recClassFiltro],
   );
 
-  const descSeg = descreverRecorteAmostras(ciclo, distrito, setor, produto, recSegFiltro);
+  const descSeg = descreverRecorteAmostras(ciclo, distrito, setor, produto, recSegFiltro)
+    + (classifSeg !== 'Todas' ? ' · ' + classifSeg : '');
   const descClass = descreverRecorteAmostras(ciclo, distrito, setor, produto, recClassFiltro);
 
   const { setHeaderState } = useLayout();
@@ -312,8 +328,10 @@ function AlocacaoDeRecursosContent() {
   useEffect(() => {
     setLoading(true);
     getAmostrasData(distrito, setor, ciclo, produto)
-      .then(({ bySegmentacao, byClassificacao, totalAmostras, totalMedicosPainel, totalMedicosComAmostra }) => {
-        setSegData(bySegmentacao);
+      .then(({ byClassificacao, totalAmostras, totalMedicosPainel, totalMedicosComAmostra }) => {
+        // bySegmentacao é ignorado de propósito: quem alimenta segData é o
+        // efeito de getAmostrasPorSegmentacao, que respeita o filtro do card.
+        // Os dois escrevendo no mesmo estado disputariam na carga inicial.
         setClassData(byClassificacao);
         setTotalAmostras(totalAmostras);
         setTotalMedicosPainel(totalMedicosPainel);
@@ -321,6 +339,14 @@ function AlocacaoDeRecursosContent() {
       })
       .finally(() => setLoading(false));
   }, [distrito, setor, ciclo, produto]);
+
+  // O gráfico de segmentação tem fonte própria por causa do filtro de
+  // classificação. Só ele recarrega quando o filtro do card muda — os outros
+  // três continuam servidos por getAmostrasData.
+  useEffect(() => {
+    getAmostrasPorSegmentacao(distrito, setor, ciclo, produto, classifSeg)
+      .then(setSegData);
+  }, [distrito, setor, ciclo, produto, classifSeg]);
 
   useEffect(() => {
     setHeaderState({
@@ -441,15 +467,33 @@ function AlocacaoDeRecursosContent() {
                   Barras: nº de médicos por segmentação · Linha: média de amostras entregues
                 </CardDescription>
               </div>
-              <button
-                onClick={() => setRecSegAberto(true)}
-                disabled={loading}
-                title="Ver a lista de médicos deste recorte"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ListFilter className="h-3.5 w-3.5" />
-                Detalhar
-              </button>
+              <div className="flex shrink-0 items-end gap-2">
+                {/* Recorte só deste gráfico — ver comentário no estado. */}
+                <div className="flex w-[150px] flex-col gap-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                    Classificação
+                  </label>
+                  {/* CustomDropdown, o mesmo de Ciclo e Produto: aceita várias
+                      seleções por Ctrl+clique e devolve CSV, que a action já
+                      trata. O Select do radix só permitiria uma. */}
+                  <CustomDropdown
+                    value={classifSeg}
+                    onChange={setClassifSeg}
+                    options={classificacaoOptions}
+                    defaultValue="Todas"
+                    disabled={!classificacoes.length}
+                  />
+                </div>
+                <button
+                  onClick={() => setRecSegAberto(true)}
+                  disabled={loading}
+                  title="Ver a lista de médicos deste recorte"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 h-6 px-2 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ListFilter className="h-3.5 w-3.5" />
+                  Detalhar
+                </button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -559,7 +603,7 @@ function AlocacaoDeRecursosContent() {
                 onClick={() => setRecClassAberto(true)}
                 disabled={loading}
                 title="Ver a lista de médicos deste recorte"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 h-6 px-2 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ListFilter className="h-3.5 w-3.5" />
                 Detalhar
