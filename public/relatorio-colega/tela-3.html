@@ -199,7 +199,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--off-white); color:var(
 #panel-anal .reg-b { position:absolute; right:3px; bottom:2px; font-size:8.5px; line-height:1; letter-spacing:.2px; }
 /* Movimento ganha pílula branca: garante >=4,5:1 para verde/vermelho nos 9 fundos
    da escala divergente, e faz a célula que mudou de posição saltar da tabela. */
-#panel-anal .reg-b.mv { font-weight:700; background:rgba(255,255,255,.88); border-radius:3px;
+#panel-anal .reg-b.mv { font-weight:700; background:rgba(255,255,255,.92); border-radius:3px;
   padding:1px 3px; bottom:1px; right:1px; box-shadow:0 0 0 .5px rgba(0,0,0,.05); }
 #panel-anal .reg-b.up { color:#0a7a3d; }
 #panel-anal .reg-b.down { color:#c22f2e; }
@@ -2585,18 +2585,53 @@ const ANAL = (() => {
     return {mks, rows, modoRep, total};
   }
 
-  // Duas escalas de propósito. As células de mercado vão a ±20 p.p.; a média,
-  // por ser média de vários mercados, se comprime para ±2,5. A mesma escala nas
-  // duas pintava de cinza toda média negativa pequena.
-  const REG_POS=[['#dceafc','#1a1a19'],['#b4d3f7','#1a1a19'],['#74abec','#1a1a19'],['#256abf','#ffffff']];
-  const REG_NEG=[['#fbe0e0','#1a1a19'],['#f5bcbc','#1a1a19'],['#ec8a8a','#1a1a19'],['#c22f2e','#ffffff']];
+  // Escala RELATIVA por coluna e por nível (v34). Cada coluna se normaliza pelos
+  // próprios extremos, e cada sinal tem a sua régua: o maior positivo da coluna é
+  // sempre o azul mais forte, o mais negativo é sempre o vermelho mais forte.
+  // Não existe mais faixa neutra — só o zero exato e a ausência de dado ficam sem cor.
+  // Distritais e setores são populações separadas: a amplitude no nível de setor é
+  // ~10x maior, e uma régua só deixaria todas as distritais quase incolores.
+  // ⚠️ Consequência declarada na nota do card: a cor compara DENTRO da coluna e do
+  // nível. Entre colunas, só os números comparam.
+  const REG_POS=[['#e8f1fd','#1a1a19'],['#c7dcf9','#1a1a19'],['#9dc3f2','#1a1a19'],
+                 ['#5f9ae4','#1a1a19'],['#1c5cab','#ffffff']];
+  const REG_NEG=[['#fdeded','#1a1a19'],['#f8cfcf','#1a1a19'],['#f0a8a8','#1a1a19'],
+                 ['#e57676','#1a1a19'],['#b02726','#ffffff']];
   const REG_NEU=['#f0efec','#6b6a66'];
-  function regCor(v){ if(v===null) return ['#ffffff','#b5b4b0'];
-    const a=Math.abs(v); if(a<0.25) return REG_NEU;
-    return (v>0?REG_POS:REG_NEG)[a<0.75?0:(a<1.5?1:(a<3.0?2:3))]; }
-  function regCorMed(v){ if(v===null) return ['#ffffff','#b5b4b0'];
-    const a=Math.abs(v); if(a<0.05) return REG_NEU;
-    return (v>0?REG_POS:REG_NEG)[a<0.5?0:(a<1.0?1:(a<2.0?2:3))]; }
+  const REG_ZERO=0.005;          // tolerância de float: os deltas são múltiplos de 0,1
+  let _regEsc=null;              // {gd:[{pos,neg}], re:[{pos,neg}]} por índice de coluna
+  function regDegrau(t){         // t em (0,1] -> 0..4
+    const i=Math.ceil(t*REG_POS.length)-1;
+    return i<0?0:(i>=REG_POS.length?REG_POS.length-1:i);
+  }
+  function regCor(v,col,nivel){
+    if(v===null||v===undefined) return ['#ffffff','#b5b4b0'];
+    if(Math.abs(v)<REG_ZERO) return REG_NEU;
+    const e=_regEsc&&_regEsc[nivel]&&_regEsc[nivel][col];
+    const ref=v>0?(e&&e.pos):(e&&e.neg);
+    // Sem referência (coluna com um único valor naquele sinal) -> degrau máximo,
+    // que é coerente: esse valor É o extremo do seu braço.
+    const t=(!ref||ref<=0)?1:Math.min(1,Math.abs(v)/ref);
+    return (v>0?REG_POS:REG_NEG)[regDegrau(t)];
+  }
+  // Extremos de cada coluna em cada nível. A linha de total NÃO entra: é um
+  // agregado, não um par das linhas abaixo — mas é pintada na régua das GDs.
+  function regCalcEscala(data){
+    const nCols=data.mks.length+1;   // mercados + MÉDIA
+    const vet=row=>row.cells.map(c=>c?c.d:null).concat([row.media]);
+    const acc={gd:[],re:[]};
+    ['gd','re'].forEach(n=>{ for(let i=0;i<nCols;i++) acc[n].push({pos:0,neg:0}); });
+    const soma=(row,n)=>vet(row).forEach((v,i)=>{
+      if(v===null||Math.abs(v)<REG_ZERO) return;
+      if(v>0) acc[n][i].pos=Math.max(acc[n][i].pos,v);
+      else    acc[n][i].neg=Math.max(acc[n][i].neg,-v);
+    });
+    data.rows.forEach(row=>{
+      soma(row,row.nivel==='gd'?'gd':'re');
+      if(row.reps) row.reps.forEach(rr=>soma(rr,'re'));
+    });
+    _regEsc=acc;
+  }
   const regF1=v=>v===null?'—':(v>0?'+':(v<0?'−':''))+Math.abs(v).toFixed(1).replace('.',',');
   const regF2=v=>(v>0?'+':(v<0?'−':''))+Math.abs(v).toFixed(2).replace('.',',');
   const REG_GLY={up:'▲',down:'▼',same:'='};
@@ -2615,15 +2650,15 @@ const ANAL = (() => {
     if(_regSort==='reg') return _regDir*String(x).localeCompare(String(y),'pt-BR');
     return _regDir*(x-y);
   }
-  function regCell(c){
+  function regCell(c,col,nivel){
     if(!c) return '<td style="background:#fff;color:#b5b4b0"><span class="reg-v">—</span></td>';
-    const co=regCor(c.d);
+    const co=regCor(c.d,col,nivel);
     const cls=c.mov==='same'?'reg-b eq':('reg-b mv '+c.mov);
     return '<td style="background:'+co[0]+';color:'+co[1]+'"><span class="reg-v">'+regF1(c.d)+
            '</span><span class="'+cls+'">#'+c.pos+' '+REG_GLY[c.mov]+'</span></td>';
   }
-  function regMed(row){
-    const co=regCorMed(row.media);
+  function regMed(row,nivel){
+    const co=regCor(row.media,_regData.mks.length,nivel);
     return '<td class="reg-med" style="background:'+co[0]+';color:'+co[1]+'"><span class="reg-v">'+
            regF2(row.media)+'</span><small>'+row.alta+'/'+row.n+' em alta</small></td>';
   }
@@ -2643,8 +2678,8 @@ const ANAL = (() => {
     const t=_regData.total;
     if(t&&t.temDado){
       h+='<tr class="reg-tot"><td class="reg-n">'+_regTotLbl+'</td>';
-      t.cells.forEach(c=>h+=regCell(c));
-      h+=regMed(t)+'</tr>';
+      t.cells.forEach((c,i)=>h+=regCell(c,i,'gd'));
+      h+=regMed(t,'gd')+'</tr>';
     }
     rows.forEach(row=>{
       const nome=regNome(row);
@@ -2652,19 +2687,19 @@ const ANAL = (() => {
         const ab=_regAberto.has(row.u);
         h+='<tr><td class="reg-n" onclick="ANAL.regToggle('+row.u+')"><span class="reg-car">'+
            (ab?'▾':'▸')+'</span>'+nome+'</td>';
-        row.cells.forEach(c=>h+=regCell(c));
-        h+=regMed(row)+'</tr>';
+        row.cells.forEach((c,i)=>h+=regCell(c,i,'gd'));
+        h+=regMed(row,'gd')+'</tr>';
         if(ab&&row.reps){
           row.reps.slice().sort(regCmp).forEach(rr=>{
             h+='<tr class="reg-rep"><td class="reg-n">'+repCell(D.re[rr.u])+'</td>';
-            rr.cells.forEach(c=>h+=regCell(c));
-            h+=regMed(rr)+'</tr>';
+            rr.cells.forEach((c,i)=>h+=regCell(c,i,'re'));
+            h+=regMed(rr,'re')+'</tr>';
           });
         }
       } else {
         h+='<tr class="reg-rep"><td class="reg-n">'+repCell(D.re[row.u])+'</td>';
-        row.cells.forEach(c=>h+=regCell(c));
-        h+=regMed(row)+'</tr>';
+        row.cells.forEach((c,i)=>h+=regCell(c,i,'re'));
+        h+=regMed(row,'re')+'</tr>';
       }
     });
     $('a-reg-body').innerHTML=h;
@@ -2681,6 +2716,7 @@ const ANAL = (() => {
     _regData=calcRegiao(meIdxArr,peBI,peAI,gdI,reI);
     if(!_regData.rows.length||!_regData.mks.length){ card.style.display='none'; _regCtx=null; return; }
     _regCtx={meIdxs:meIdxArr.slice(), pb, pa, gdTxt, repTxt};
+    regCalcEscala(_regData);
     _regAberto.clear();
     _regSort='med'; _regDir=-1;
     _regTotLbl=(gdTxt&&gdTxt!=='__ALL__')?('TOTAL '+gdTxt):'TOTAL BRASIL';
@@ -2692,8 +2728,10 @@ const ANAL = (() => {
       'no período base, e se ela subiu <b style="color:#0a7a3d">▲</b>, caiu <b style="color:#c22f2e">▼</b> '+
       'ou manteve = em relação ao período anterior. Azul = ganho de share, vermelho = perda. '+
       'A média é simples — trata cada mercado com o mesmo peso, então mede consistência, não volume. '+
-      'A coluna MÉDIA tem escala de cor própria (ela se comprime para perto de zero por ser uma média), '+
-      'portanto compare cores dentro de cada bloco, não entre eles.'+
+      '<br><strong>A intensidade da cor é relativa à própria coluna e ao próprio nível:</strong> '+
+      'em cada coluna o maior valor positivo recebe o azul mais forte e o mais negativo o vermelho mais forte, '+
+      'com distritais e setores medidos em réguas separadas. Assim cada coluna usa a escala inteira — mas '+
+      'a cor só compara na vertical. <strong>Para comparar magnitudes entre colunas, use os números.</strong>'+
       ((gdTxt&&gdTxt!=='__ALL__')?'':
        '<br><strong>TOTAL BRASIL não é a soma das distritais.</strong> Ele é o share nacional oficial, '+
        'que inclui NAO_VISITADOS no denominador — o mesmo número do KPI e da tabela de Ranking de Marcas. '+
