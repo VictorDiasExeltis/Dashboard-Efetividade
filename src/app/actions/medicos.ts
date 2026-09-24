@@ -116,7 +116,7 @@ const fetchMedicosNaoVisitadosCached = unstable_cache(
         MAX(CASE WHEN s.id_marca = 10007 THEN s.segmentacao END) AS vizuria
       FROM dim_medicos m
       LEFT JOIN dim_hierarquia h_med ON h_med.cod_setor = m.cod_setor
-      LEFT JOIN fato_segmentacao s ON s.crmuf = m.crmuf
+      LEFT JOIN fato_segmentacao_atual s ON s.crmuf = m.crmuf
       WHERE m.status = TRUE
         -- Sem visita em nenhum ciclo da janela (a "janela de abandono")
         AND NOT EXISTS (

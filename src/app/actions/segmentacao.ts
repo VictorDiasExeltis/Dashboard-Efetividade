@@ -264,7 +264,19 @@ function predicadosSegmentacao(
       ${classificacaoWhere}
       ${potencialWhere}`;
 
-  const segmentacaoJoin = sql`LEFT JOIN fato_segmentacao s
+  // Esta tela conta MÉDICOS, não visitas, então o ciclo da segmentação vem do
+  // filtro: com um ciclo escolhido, usa a segmentação vigente NAQUELE ciclo —
+  // é o que o representante tinha no radar. Com "Todos" ou vários ciclos não
+  // existe um ciclo de referência, e aí vale a versão mais recente.
+  // Atenção: com "Todos", `cicloList` vale ['Todos'] — tem tamanho 1 mas NÃO é
+  // um ciclo. Sem o teste de 'Todos' a junção procura um ciclo inexistente e a
+  // tela inteira cai em "SEM SEGMENTAÇÃO".
+  const umCicloSo = ciclo !== 'Todos' && cicloList.length === 1;
+
+  const segmentacaoJoin = umCicloSo
+    ? sql`LEFT JOIN fato_segmentacao_ciclo s
+      ON s.crmuf = m.crmuf AND s.id_marca = ${marcaId} AND s.ciclo = ${cicloList[0]}`
+    : sql`LEFT JOIN fato_segmentacao_atual s
       ON s.crmuf = m.crmuf AND s.id_marca = ${marcaId}`;
 
   const visitaJoin = sql`LEFT JOIN fato_visitas_fechado v

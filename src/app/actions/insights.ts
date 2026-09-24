@@ -105,7 +105,7 @@ const _getVisitacaoEntregaCached = cacheLoader(
       db.execute(sql`
         SELECT ${seg} AS label, COUNT(*)::int AS valor
         FROM fato_visitas_fechado v
-        LEFT JOIN fato_segmentacao s ON s.crmuf = v.crmuf AND s.id_marca = ${marcaId}
+        LEFT JOIN fato_segmentacao_ciclo s ON s.crmuf = v.crmuf AND s.id_marca = ${marcaId} AND s.ciclo = v.ciclo
         WHERE TRUE ${periodo} ${distritoWhere}
         GROUP BY ${seg} ORDER BY valor DESC
       `),
@@ -114,7 +114,7 @@ const _getVisitacaoEntregaCached = cacheLoader(
         FROM fato_amostras a
         JOIN fato_visitas_fechado v ON v.id_visita = a.id_visita
         JOIN dim_produtos p ON p.id_produto = a.id_produto AND p.id_marca = ${marcaId}
-        LEFT JOIN fato_segmentacao s ON s.crmuf = v.crmuf AND s.id_marca = ${marcaId}
+        LEFT JOIN fato_segmentacao_ciclo s ON s.crmuf = v.crmuf AND s.id_marca = ${marcaId} AND s.ciclo = v.ciclo
         WHERE TRUE ${periodo} ${distritoWhere}
         GROUP BY ${seg} ORDER BY valor DESC
       `),
@@ -307,7 +307,7 @@ const _getInsightsExtrasCached = cacheLoader(
         SELECT v.cod_setor, COUNT(DISTINCT v.crmuf)::int AS n
         FROM fato_visitas v
         WHERE v.ciclo = (SELECT ciclo FROM cd)
-          AND NOT EXISTS (SELECT 1 FROM fato_segmentacao s WHERE s.crmuf = v.crmuf)
+          AND NOT EXISTS (SELECT 1 FROM fato_segmentacao_ciclo s WHERE s.crmuf = v.crmuf AND s.ciclo = v.ciclo)
         GROUP BY v.cod_setor
       )
       SELECT

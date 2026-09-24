@@ -289,6 +289,162 @@ daqui a seis meses — não tem por onde começar.
 
 ---
 
+> **Itens 9 a 13 — pedido de novas visualizações, recebido em 18/09/2026.**
+> Estão em ordem de prontidão dos dados: 9 e 10 têm base, 11 depende de um
+> arquivo de exemplo, 12 e 13 esperam a origem.
+>
+> **18/09: criada a tela `/em-teste`** para validar as visualizações antes de
+> irem para as telas definitivas. Só aparece para a lista de administradores
+> da Central de Cargas. Já mostra os itens 9 e 10 com dado real; 11 a 13 estão
+> como espaço reservado. Tabelas novas: `dim_medicos_termos` e
+> `fato_visitas_acomp`, carregadas por script.
+
+## 9. Médicos que faltam assinar o termo de AGs — em teste desde 18/09
+
+**Tela:** Em teste (`/em-teste`). Destino definitivo a definir.
+
+**Origem:** base de cadastro (`ConsultaCadMed.xlsx`). O dado já vem no extrato
+que usamos para o painel, mas não é carregado: `dim_medicos` não tem essas
+colunas, e ganhar a coluna é o primeiro passo.
+
+**O cadastro tem dois controles diferentes**, e o pedido não diz qual é:
+
+| Coluna | Valores (médicos ativos, extrato de 01/09) |
+|---|---|
+| `TERMO_AG` + `DT_VALIDADE_TERMO` | Vigente 12.451 · Expirando 529 · Expirado 1.785 · Sem termo 866 |
+| `OPTIN_STATUS` + `OPTIN_VALIDADE` | Vigente 5.276 · Expirado 4.029 · Sem opt-in 6.326 |
+
+Os dois não andam juntos: 4.493 médicos têm termo AG vigente e nenhum opt-in.
+
+**Decidido em 18/09:**
+- **As duas.** Termo AG e opt-in são coisas diferentes e os dois foram pedidos.
+  A tela mostra cada um separado.
+- **"Faltam assinar" = quem falta assinar.** A lista abre só com quem nunca
+  assinou (866 no termo AG, 6.326 no opt-in). Expirado e expirando entram
+  quando marcados. Se a leitura certa for incluir quem precisa renovar, basta
+  trocar o padrão.
+
+**A decidir:**
+- **O status envelhece.** Ele é gravado como veio do cadastro, na data do
+  extrato (01/09). Quem estava "expirando" pode já ter expirado. Opções:
+  recalcular pela data de validade (a origem usa 30 dias para "expirando") ou
+  recarregar o cadastro com mais frequência.
+- A lista mostra nome e CRM, então é dado pessoal na tela. Mesmo ponto do
+  item 2.
+- A carga de `dim_medicos_termos` ainda é por script. Quando o cadastro for
+  recarregado, ela precisa vir junto.
+
+---
+
+## 10. Acompanhamentos no ciclo vigente — em teste desde 18/09
+
+**Tela:** Em teste (`/em-teste`), por enquanto. Destino provável: Análise de
+Ciclo (`/analise-diaria`), por ser a única que mostra o ciclo aberto.
+
+**Origem:** base de visitação. Cada visita traz uma marca S/N por quem
+acompanhou: `ACOMP GD`, `ACOMP GR`, `ACOMP TRN`, `ACOMP MKT`, `ACOMP GNV`,
+`ACOMP OUTROS`. Nenhuma dessas colunas é carregada hoje.
+
+No ciclo 10 fechado: 445 visitas com o GD junto, que viram **62 dias de campo
+em 31 dos 83 setores**. Os outros acompanhantes quase não aparecem (outros 45,
+marketing 13, treinamento 4, GR 1, GNV nenhum).
+
+**Obstáculo:** a Análise de Ciclo é alimentada pelo relatório resumido por
+setor, que não tem acompanhamento. Para o ciclo aberto, seria preciso subir a
+base de visitação toda semana. Foi justamente o que abandonamos em 17/08: CRM
+faltando em `dim_medicos` travava a carga. Proposta: gravar só setor, data, ID
+da visita e as marcas de acompanhamento, sem o médico. Assim não há FK com
+`dim_medicos` e o travamento não volta.
+
+**Decidido em 18/09:** a proposta acima foi aprovada (`fato_visitas_acomp`,
+sem médico), e a métrica é **dias de campo**. A tela de teste mostra:
+- por setor: dias em que o representante foi acompanhado, por tipo de
+  acompanhante;
+- por distrito: datas distintas em que o GD esteve em campo. Se ele
+  acompanhou dois setores no mesmo dia, conta um dia só. Por isso a soma dos
+  distritos (61 no ciclo 10) fica abaixo da soma dos setores (62).
+
+**Histórico carregado em 21/09:** ciclos 01 a 10, 105.659 visitas, conferindo
+1:1 com `fato_visitas` em todos eles. A tela ganhou seletor de ciclo e um
+gráfico de dias de campo por ciclo. O ciclo vigente (12) entra quando a base de
+visitação dele for carregada; a carga substitui um ciclo por vez.
+
+**Duas armadilhas do arquivo de origem** (`visitas-acompanhadas-1ao9.xlsx`),
+que valem para qualquer extração futura:
+
+- **Linhas sem `DATA REGISTRO` são clones da migração de setores**, não visitas.
+  Quando os 5 setores do Paraná foram recodificados, o sistema gerou uma cópia
+  de cada visita anterior sob o código novo, sem data de registro nem de envio.
+  Eram 2.924 linhas, nenhuma com acompanhamento, e nenhuma existe em
+  `fato_visitas`. Descartar sempre.
+- **Cinco setores extintos**: 1180014 a 1180018 viraram 1190001 a 1190005. O
+  banco guarda as visitas antigas já com o código novo, então o de-para sai de
+  `fato_visitas` pelo `id_visita`. São 2.948 registros nos ciclos 01 a 05.
+
+Sem esses dois tratamentos, o arquivo traz 108.583 linhas e não fecha com o
+banco em nenhum dos ciclos 01 a 05.
+
+**A decidir:**
+- Frequência da carga no ciclo aberto (semanal, como o resumo?) e se ela
+  entra na Central de Cargas ou segue por script.
+- Se todos os acompanhantes ficam na tela ou só o GD. Os outros quase não
+  aparecem.
+
+---
+
+## 11. Relatório de sincronização — em teste desde 18/09
+
+**Tela:** Em teste (`/em-teste`). Destino definitivo a definir.
+
+**Origem:** relatório "Dias de trabalho" (`sincronizacao.csv`). Traz uma linha
+por setor, uma coluna por dia do ciclo (fins de semana inclusos) e o número de
+sincronizações do tablet naquele dia. O ciclo e o período estão só no título.
+Tem 9 totalizadores de distrito (código terminado em `0000`), que são
+descartados. O rodapé ("Sábado/Domingo", "Não conexão") era a legenda de cores
+do Excel e se perde no CSV.
+
+**O que a sincronização mede:** é o envio das visitas ao sistema. No ciclo 10,
+98% dos dias com visita enviada tiveram sincronização registrada (983 de 990).
+Dia útil com 0 é a "não conexão": se houve visita, ela só entra no sistema
+quando o representante sincroniza de novo. Isso atrasa o ciclo aberto na
+Análise de Ciclo.
+
+**Tabela:** `fato_sincronizacao`, uma linha por setor × dia, com marcação de
+setor vago. Só guarda dias já percorridos (o título diz quantos). A carga
+substitui o ciclo.
+
+**Ciclo 10, conferido:** 2.591 sincronizações, igual à soma dos distritos do
+arquivo, e média de 2,01 por dia útil. Foram 210 dias úteis sem sincronizar,
+137 deles com visita no dia, em 59 dos 83 setores com representante.
+
+**A decidir:**
+- Qual é o alerta. Hoje a tela mostra dias sem sincronizar, a maior sequência
+  e a última sincronização. Falta definir um corte, por exemplo 3 dias seguidos.
+- Frequência da carga no ciclo aberto, junto com a da visitação.
+- Destino: faz sentido perto da Análise de Ciclo, porque explica visita
+  "faltando" no parcial.
+
+---
+
+## 12. Saldo de amostras
+
+**Tela:** Entrega de Amostras (`/alocacao-de-recursos`), provavelmente.
+
+**Origem:** a confirmar. O que temos hoje (`fato_amostras`) é o que foi
+**entregue** ao médico. Saldo é estoque em poder do representante, e isso não
+sai dessa base: precisa de outra fonte, com o que foi enviado a cada setor.
+
+---
+
+## 13. Resumo de eventos na visão macro
+
+**Tela:** a definir. Nenhuma tela se chama "macro" hoje. Confirmar se é a
+Cobertura e MDV.
+
+**Origem:** ainda não existe base de eventos.
+
+---
+
 ---
 
 # Pendências técnicas
@@ -306,9 +462,15 @@ coisas que já existem e ficaram em aberto. Ordenadas por risco.
 - **424 médicos ativos sem segmentação em nenhuma marca.** Lista pronta em
   `medicos_sem_segmentacao_424_2026-08-14.csv` (fora do repo, contém dado
   pessoal).
-- **`fato_segmentacao` não tem coluna de ciclo.** Toda carga nova reescreve
-  retroativamente os relatórios de todos os ciclos já fechados. Dar
-  historicidade exige mudança de modelagem.
+- **`fato_segmentacao` sem coluna de ciclo — ✅ RESOLVIDO 24/09.** A tabela
+  ganhou `ciclo_inicio`: cada carga entra como versão válida a partir de um
+  ciclo, e os relatórios de ciclos fechados param de mudar quando chega base
+  nova. Hoje convivem maio/2026 (do ciclo 01) e agosto/2026 (do ciclo 11) — a
+  de agosto tinha sido revertida em 02/09 justamente por falta dessa dimensão.
+  As telas leem a view materializada `fato_segmentacao_ciclo` (cruzando sempre
+  `s.ciclo = v.ciclo`) ou `fato_segmentacao_atual`, nas que falam do painel de
+  hoje. Definições em `sql/views_segmentacao_ciclo.sql`. **A materializada
+  precisa de REFRESH depois de toda carga de segmentação.**
 
 ## Cargas
 

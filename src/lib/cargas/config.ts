@@ -169,16 +169,17 @@ export const CARGA_FATO_SEGMENTACAO: CargaSpec = {
   id: 'fato_segmentacao',
   tabela: 'fato_segmentacao',
   nome: 'Segmentação',
-  descricao: 'Segmentação dos médicos por marca (CONQUISTAR, PROTEGER, etc.). Substitui a base inteira.',
-  tipo: 'sobrescreve',
+  descricao: 'Segmentação dos médicos por marca (CONQUISTAR, PROTEGER, etc.). Cada carga entra como uma versão nova, válida a partir de um ciclo — o histórico dos ciclos anteriores não muda.',
+  tipo: 'adiciona_ciclo',
   grupo: 'Cadastros',
   implementado: false,
   colunas: [
-    { campo: 'crmuf',       label: 'CRM/UF',       tipo: 'texto',   obrigatoria: true, aliases: ['crmuf', 'crm_uf', 'crm'] },
-    { campo: 'id_marca',    label: 'ID da Marca',  tipo: 'inteiro', obrigatoria: true, aliases: ['id_marca', 'marca'] },
-    { campo: 'segmentacao', label: 'Segmentação',  tipo: 'texto',   obrigatoria: true, aliases: ['segmentacao', 'segmento'] },
+    { campo: 'crmuf',        label: 'CRM/UF',           tipo: 'texto',   obrigatoria: true, aliases: ['crmuf', 'crm_uf', 'crm'] },
+    { campo: 'id_marca',     label: 'ID da Marca',      tipo: 'inteiro', obrigatoria: true, aliases: ['id_marca', 'marca'] },
+    { campo: 'segmentacao',  label: 'Segmentação',      tipo: 'texto',   obrigatoria: true, aliases: ['segmentacao', 'segmento'] },
+    { campo: 'ciclo_inicio', label: 'Vale a partir do ciclo', tipo: 'texto', obrigatoria: true, aliases: ['ciclo_inicio', 'ciclo', 'vigencia'] },
   ],
-  chaveNatural: ['crmuf', 'id_marca'],
+  chaveNatural: ['crmuf', 'id_marca', 'ciclo_inicio'],
 };
 
 // Cargas disponíveis no hub. Nenhuma gravando ainda (implementado:false) até a

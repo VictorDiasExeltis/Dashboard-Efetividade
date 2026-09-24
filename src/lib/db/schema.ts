@@ -126,6 +126,20 @@ export const fato_abonos = pgTable('fato_abonos', {
   horas_abonadas: numeric('horas_abonadas'),
 });
 
+// Segmentação por médico × marca, COM HISTÓRICO desde 2026-09-24.
+//
+// `ciclo_inicio` é o primeiro ciclo em que aquele valor vale; cada carga entra
+// como uma versão nova, sem apagar a anterior. Hoje existem duas: maio/2026
+// (202601) e agosto/2026 (202611) — a de agosto chegou no fim do ciclo 10, e o
+// representante só trabalhou com ela a partir do 11.
+//
+// NÃO cruzar esta tabela direto com visitas: sem filtro de versão a junção
+// multiplica linhas. Use as views:
+//   `fato_segmentacao_ciclo` (materializada) — segmentação vigente em cada
+//      ciclo, para cruzar com visita/amostra pelo ciclo delas;
+//   `fato_segmentacao_atual` — a versão mais recente, para telas que falam do
+//      painel de hoje (Target List).
+// A materializada precisa de REFRESH depois de toda carga de segmentação.
 export const fato_segmentacao = pgTable(
   'fato_segmentacao',
   {
@@ -133,10 +147,12 @@ export const fato_segmentacao = pgTable(
     crmuf:          varchar('crmuf', { length: 20 }).references(() => dim_medicos.crmuf),
     id_marca:       integer('id_marca').references(() => dim_marcas.id_marca),
     segmentacao:    varchar('segmentacao', { length: 50 }),
+    ciclo_inicio:   varchar('ciclo_inicio', { length: 10 }).notNull().default('202601'),
   },
   (t) => [
-    unique('fato_segmentacao_crm_id_marca_key').on(t.crmuf, t.id_marca),
+    unique('fato_segmentacao_crmuf_marca_ciclo_key').on(t.crmuf, t.id_marca, t.ciclo_inicio),
     index('idx_fato_segmentacao_crmuf').on(t.crmuf),
+    index('idx_fato_segmentacao_marca_ciclo').on(t.crmuf, t.id_marca, t.ciclo_inicio.desc()),
   ],
 );
 
@@ -212,4 +228,80 @@ export const fato_ciclo_resumo = pgTable(
   },
   // Chave natural: um registro por setor por ciclo. A carga substitui o ciclo.
   (t) => [primaryKey({ columns: [t.cod_setor, t.ciclo] })],
+);
+
+// ---------------------------------------------------------------------------
+// Tela Em Teste (18/09/2026) — lidas só pelo servidor: RLS ligado e sem policy,
+// como log_cargas.
+// ---------------------------------------------------------------------------
+
+// Termo AG e opt-in por médico, posição do extrato de cadastro (CadMed). São dois
+// controles independentes. Uma linha por CRM, vinda do vínculo ativo (mesma regra
+// de consolidação de dim_medicos). O status é o da origem na data `posicao_em` e
+// envelhece depois dela: "expirando" hoje pode já ter expirado.
+export const dim_medicos_termos = pgTable(
+  'dim_medicos_termos',
+  {
+    crmuf:             varchar('crmuf', { length: 20 }).primaryKey()
+      .references(() => dim_medicos.crmuf),
+    termo_ag:          varchar('termo_ag', { length: 12 }).notNull(),
+    termo_ag_validade: date('termo_ag_validade'),
+    optin:             varchar('optin', { length: 12 }).notNull(),
+    optin_validade:    date('optin_validade'),
+    posicao_em:        date('posicao_em').notNull(),
+    atualizado_em:     timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('dim_medicos_termos_termo_ag_check',
+      sql`${t.termo_ag} IN ('vigente', 'expirando', 'expirado', 'sem_termo')`),
+    check('dim_medicos_termos_optin_check',
+      sql`${t.optin} IN ('vigente', 'expirado', 'sem_optin')`),
+  ],
+);
+
+// Marcas de acompanhamento (GD, GR, treinamento, marketing, GNV, outros) por
+// visita, da base de visitação. Sem crmuf de propósito: sem FK para dim_medicos,
+// a carga do ciclo aberto não trava por médico ausente do cadastro — o motivo de
+// o ciclo aberto ter saído de fato_visitas em 17/08. A carga substitui o ciclo.
+export const fato_visitas_acomp = pgTable(
+  'fato_visitas_acomp',
+  {
+    id_visita:     text('id_visita').primaryKey(),
+    ciclo:         varchar('ciclo', { length: 10 }).notNull(),
+    cod_setor:     integer('cod_setor').notNull()
+      .references(() => dim_hierarquia.cod_setor, { onUpdate: 'cascade' }),
+    data_visita:   date('data_visita').notNull(),
+    acomp_gd:      boolean('acomp_gd').notNull().default(false),
+    acomp_gr:      boolean('acomp_gr').notNull().default(false),
+    acomp_trn:     boolean('acomp_trn').notNull().default(false),
+    acomp_mkt:     boolean('acomp_mkt').notNull().default(false),
+    acomp_gnv:     boolean('acomp_gnv').notNull().default(false),
+    acomp_outros:  boolean('acomp_outros').notNull().default(false),
+    atualizado_em: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_fato_visitas_acomp_ciclo_setor').on(t.ciclo, t.cod_setor)],
+);
+
+// Sincronizações do tablet por setor e dia, do relatório "Dias de trabalho".
+// Sincronizar é o que envia as visitas ao sistema: dia útil com 0 é a "não
+// conexão" do relatório de origem, e as visitas daquele dia só entram quando o
+// representante sincroniza de novo. Guarda só os dias já percorridos do ciclo;
+// os 9 totalizadores de distrito do arquivo são descartados. `vago` = o
+// relatório mostrava o setor sem representante. A carga substitui o ciclo.
+export const fato_sincronizacao = pgTable(
+  'fato_sincronizacao',
+  {
+    cod_setor:      integer('cod_setor').notNull()
+      .references(() => dim_hierarquia.cod_setor, { onUpdate: 'cascade' }),
+    data:           date('data').notNull(),
+    ciclo:          varchar('ciclo', { length: 10 }).notNull(),
+    sincronizacoes: integer('sincronizacoes').notNull(),
+    vago:           boolean('vago').notNull().default(false),
+    atualizado_em:  timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.cod_setor, t.data] }),
+    index('idx_fato_sincronizacao_ciclo').on(t.ciclo),
+    check('fato_sincronizacao_sincronizacoes_check', sql`${t.sincronizacoes} >= 0`),
+  ],
 );

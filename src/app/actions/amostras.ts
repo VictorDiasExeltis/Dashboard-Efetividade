@@ -122,8 +122,8 @@ const _getAmostrasDataCached = cacheLoader(
         FROM fato_amostras a
         INNER JOIN fato_visitas  v ON v.id_visita = a.id_visita
         INNER JOIN dim_produtos  p ON p.id_produto = a.id_produto
-        LEFT  JOIN fato_segmentacao s
-          ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca
+        LEFT  JOIN fato_segmentacao_ciclo s
+          ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca AND s.ciclo = v.ciclo
         WHERE TRUE
           ${territorioFiltro}
           ${cicloFiltro}
@@ -299,8 +299,8 @@ export async function getAmostrasRecortePorSegmentacao(
       FROM fato_amostras a
       INNER JOIN fato_visitas  v ON v.id_visita = a.id_visita
       INNER JOIN dim_produtos  p ON p.id_produto = a.id_produto
-      LEFT  JOIN fato_segmentacao s
-        ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca
+      LEFT  JOIN fato_segmentacao_ciclo s
+        ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca AND s.ciclo = v.ciclo
       LEFT  JOIN dim_medicos    m ON m.crmuf = v.crmuf
       LEFT  JOIN dim_hierarquia h ON h.cod_setor = v.cod_setor
       WHERE TRUE
@@ -489,8 +489,8 @@ export async function getAmostrasPorSegmentacao(
       INNER JOIN fato_visitas  v ON v.id_visita = a.id_visita
       INNER JOIN dim_produtos  p ON p.id_produto = a.id_produto
       ${medicoJoin}
-      LEFT  JOIN fato_segmentacao s
-        ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca
+      LEFT  JOIN fato_segmentacao_ciclo s
+        ON s.crmuf = v.crmuf AND s.id_marca = p.id_marca AND s.ciclo = v.ciclo
       WHERE TRUE
         ${p.territorioFiltro}
         ${p.cicloFiltro}
