@@ -28,8 +28,11 @@ const config: LineChartCardConfig = {
     return Math.round((row.total_visitas / row.total_painel) * 1000) / 10;
   },
 
-  yDomain: [50, 100],
-  yTicks: [50, 60, 70, 80, 90, 100],
+  // Escala cheia, de 0 a 100%: a barra passa a ser proporcional ao valor e
+  // setor abaixo de 50% aparece normalmente. Antes o eixo começava em 50 e
+  // quem ficava abaixo disso sumia do gráfico sem aviso.
+  yDomain: [0, 100],
+  yTicks: [0, 20, 40, 60, 80, 100],
   yTickFormatter: (v) => `${v}%`,
   tooltipFormatter: (v) => `${v.toFixed(1)}%`,
   labelFormatValue: (v) => `${v.toFixed(1)}%`,

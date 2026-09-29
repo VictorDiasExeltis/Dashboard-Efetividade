@@ -426,22 +426,45 @@ arquivo, e média de 2,01 por dia útil. Foram 210 dias úteis sem sincronizar,
 
 ---
 
-## 12. Saldo de amostras
+## 12. Saldo de amostras — em teste desde 25/09
 
-**Tela:** Entrega de Amostras (`/alocacao-de-recursos`), provavelmente.
+**Tela:** Em teste (`/em-teste`). Destino provável: Entrega de Amostras.
 
-**Origem:** a confirmar. O que temos hoje (`fato_amostras`) é o que foi
-**entregue** ao médico. Saldo é estoque em poder do representante, e isso não
-sai dessa base: precisa de outra fonte, com o que foi enviado a cada setor.
+**Origem:** `Saldo_de_amostras_ciclo11.xlsx`, uma linha por setor × produto ×
+lote, com saldo anterior, recebido, aceito, outras movimentações, entregue em
+visita e saldo final. Tabela `fato_saldo_amostras`, carga substitui o ciclo.
+
+**Confere com a base de amostras:** a entrega somou 91.014 unidades nos dois
+lados, no ciclo 11. A equação do saldo fecha nas 798 linhas.
+
+**Ciclo 11:** 75.818 unidades em estoque, 0,83 ciclo de cobertura, e **nenhuma
+remessa nova entrou** — o estoque veio todo do ciclo anterior.
+
+**A decidir:**
+- O corte de alerta. A tela usa 0,5 ciclo para "pode faltar" e 2 ciclos para
+  "estoque parado" — números meus, não da área.
+- O que fazer com os 66 lotes pendentes de aceite, em 6 setores.
 
 ---
 
-## 13. Resumo de eventos na visão macro
+## 13. Resumo de eventos (ações) — em teste desde 25/09
 
-**Tela:** a definir. Nenhuma tela se chama "macro" hoje. Confirmar se é a
-Cobertura e MDV.
+**Tela:** Em teste (`/em-teste`). Destino a definir — nenhuma tela se chama
+"macro" hoje.
 
-**Origem:** ainda não existe base de eventos.
+**Origem:** `ações-ano.xlsx`: CRM, nome da ação e data. 8.023 participações de
+4.193 médicos em 49 ações, de out/2025 a ago/2026. Tabela `fato_acoes`.
+
+**Sem FK para o cadastro:** 185 CRMs não estão no painel, porque as ações são
+nacionais. A tela mostra os dois recortes.
+
+**Tipo e marca são deduzidos do nome da ação** (GYNOBOX, ROUND TABLE,
+PROEXPERIENCE, MASTER CLASS, LIVE...) — a base não traz essa classificação.
+Se a área tiver a classificação oficial, ela substitui a dedução.
+
+**A decidir:** se o cruzamento útil é com visitação (3.078 dos 3.869
+participantes do painel foram visitados no ciclo 11), com segmentação ou com
+potencial.
 
 ---
 

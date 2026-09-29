@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   LineChart,
@@ -40,7 +40,9 @@ const CHART_COLORS = {
 type DadosGrafico = {
   ciclo: string;
   cicloLabel: string;
-  [serie: string]: number | string;
+  // null = sem dado naquele ciclo (setor fora do cálculo ou sem visita).
+  // O Recharts interrompe a linha e não desenha barra, que é o correto.
+  [serie: string]: number | string | null;
 };
 
 function formatarCicloLabel(ciclo: string): string {
@@ -106,7 +108,9 @@ function CustomBarTooltip({ active, payload, label, formatValue }: any) {
           style={{ backgroundColor: item.color ?? item.fill }}
         />
         <span className="text-slate-600">{item.name}</span>
-        <span className="font-bold text-slate-900">{formatValue(Number(item.value))}</span>
+        <span className="font-bold text-slate-900">
+          {item.value == null ? 'fora do cálculo' : formatValue(Number(item.value))}
+        </span>
       </div>
     </div>
   );
@@ -222,6 +226,30 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
   // Vazio = todas em destaque (gráfico normal).
   const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
 
+  // Eixo Y que acompanha o dado. O domínio fixo da configuração é só o mínimo
+  // desejado: um valor abaixo do piso (ou acima do teto) some do gráfico sem
+  // aviso, e some parecendo igual a um setor fora do cálculo. Aqui o piso desce
+  // e o teto sobe, em passos do próprio eixo, até caber o que existe.
+  const { domain, ticks } = useMemo(() => {
+    const [pisoCfg, tetoCfg] = config.yDomain;
+    const passo = config.yTicks.length > 1 ? config.yTicks[1] - config.yTicks[0] : 10;
+    const valores = dados.flatMap((d) => series.map((s) => d[s]))
+      .filter((v): v is number => typeof v === 'number');
+    if (valores.length === 0) return { domain: config.yDomain, ticks: config.yTicks };
+
+    const min = Math.min(...valores);
+    const max = Math.max(...valores);
+    // Desce e sobe em passos inteiros A PARTIR do domínio configurado, para as
+    // marcações continuarem alinhadas com as originais (na MDV o passo é 1,25).
+    const piso = min < pisoCfg ? pisoCfg - Math.ceil((pisoCfg - min) / passo) * passo : pisoCfg;
+    const teto = max > tetoCfg ? tetoCfg + Math.ceil((max - tetoCfg) / passo) * passo : tetoCfg;
+    if (piso === pisoCfg && teto === tetoCfg) return { domain: config.yDomain, ticks: config.yTicks };
+
+    const lista: number[] = [];
+    for (let v = piso; v <= teto + 1e-9; v += passo) lista.push(Number(v.toFixed(2)));
+    return { domain: [piso, teto] as [number, number], ticks: lista };
+  }, [dados, series, config.yDomain, config.yTicks]);
+
   const toggleSeries = (label: string) => {
     setHighlighted((prev) => {
       const next = new Set(prev);
@@ -294,17 +322,26 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
         .filter((c) => cicloSet.size === 0 || cicloSet.has(c))
         .sort();
 
-      setSeries(uniqueLabels);
-
       const pivotData: DadosGrafico[] = uniqueCiclos.map((ciclo) => {
         const item: DadosGrafico = { ciclo, cicloLabel: formatarCicloLabel(ciclo) };
         uniqueLabels.forEach((label) => {
           const row = rows.find((r) => r.ciclo === ciclo && r.label === label);
-          item[label] = row ? config.computeValue(row) : 0;
+          // Sem linha no RPC = setor fora do cálculo naquele ciclo (marcado
+          // "não considerar") ou sem visita. Isso NÃO é zero: zerar desenhava
+          // barra vazia e ponto em 0% para um setor que devia sumir do ciclo.
+          // null deixa o buraco, que é o que o dado diz.
+          item[label] = row ? config.computeValue(row) : null;
         });
         return item;
       });
 
+      // Série que não tem valor em NENHUM dos ciclos exibidos sai do gráfico e
+      // da legenda. Sem isso o setor fora do cálculo reservava um espaço vazio
+      // entre as barras, parecendo uma barra que não desenhou.
+      const comDado = uniqueLabels.filter((label) =>
+        pivotData.some((d) => typeof d[label] === 'number'));
+
+      setSeries(comDado);
       setDados(pivotData);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido ao buscar dados.';
@@ -450,8 +487,8 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                     dy={10}
                   />
                   <YAxis
-                    domain={config.yDomain}
-                    ticks={config.yTicks}
+                    domain={domain}
+                    ticks={ticks}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: CHART_COLORS.tick, fontSize: 11 }}
@@ -527,8 +564,8 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                     dy={10}
                   />
                   <YAxis
-                    domain={config.yDomain}
-                    ticks={config.yTicks}
+                    domain={domain}
+                    ticks={ticks}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: CHART_COLORS.tick, fontSize: 11 }}
@@ -541,7 +578,10 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
                       border: `1px solid ${CHART_COLORS.tooltip.border}`,
                     }}
                     itemSorter={(item) => -(item.value as number)}
-                    formatter={(value, name) => [config.tooltipFormatter(Number(value)), name]}
+                    formatter={(value, name) => [
+                      value == null ? 'fora do cálculo' : config.tooltipFormatter(Number(value)),
+                      name,
+                    ]}
                     isAnimationActive={false}
                   />
                   <Legend content={<CustomChartLegend highlighted={highlighted} onToggle={toggleSeries} />} verticalAlign="top" />

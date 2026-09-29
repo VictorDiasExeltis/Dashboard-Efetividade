@@ -5,6 +5,58 @@ usuários. Mais recente no topo.
 
 ---
 
+## 29/09/2026 — gráficos mostrando o que faltava, e afastamentos corrigidos
+
+### Os gráficos escondiam setor com cobertura baixa
+
+Nos gráficos de **Cobertura** e **MDV**, o eixo começava em 50% (e em 7, na MDV).
+Qualquer setor abaixo disso ficava fora da área desenhada e **simplesmente não
+aparecia** — nem barra, nem ponto, nem aviso.
+
+Agora os dois eixos mostram a escala cheia: **0 a 100%** na Cobertura e **0 a 14**
+na MDV. Todo setor aparece, por pior que esteja o número. A linha de meta
+continua onde estava.
+
+Você vai notar dois efeitos:
+
+- **Barras mais baixas em geral.** Elas agora são proporcionais ao valor de
+  verdade. Antes, um setor com 60% e outro com 90% pareciam muito mais distantes
+  do que são, porque a escala começava no meio.
+- **Setores que você nunca tinha visto.** Quem estava abaixo de 50% de cobertura
+  passa a aparecer.
+
+### Setor fora do cálculo não aparece mais como zero
+
+Quando um setor é marcado como "não considerar" num ciclo — por estar vago ou
+com o representante afastado boa parte do período —, ele some daquele ciclo no
+gráfico, e o nome sai da legenda. Antes, ele desenhava uma **barra vazia**, que
+parecia cobertura zero.
+
+Passando o mouse, o que aparece é **"fora do cálculo"**, em vez de 0%.
+
+### Ciclos 10 e 11: afastamento médico separado de setor vago
+
+O sistema de origem registra com o mesmo motivo duas situações bem diferentes:
+**representante afastado** e **setor sem representante**. As duas vinham sendo
+tratadas como vaga, e os dias de afastamento não apareciam como abono.
+
+Depois de conferir caso a caso com a gestão, **68 dias de afastamento médico**
+passaram a constar como abono nos ciclos 10 e 11, em quatro setores. Um quinto
+setor, esse sim uma vaga real, continua como estava.
+
+Com isso, os setores que passaram um terço ou mais do ciclo sem representante
+saíram do cálculo daquele ciclo — não faz sentido comparar meio ciclo com um
+ciclo inteiro. **A cobertura subiu em consequência:**
+
+| Ciclo | Antes | Depois |
+|---|---:|---:|
+| 10 | 81,4% | **82,8%** |
+| 11 | 79,6% | **80,0%** |
+
+Nenhuma visita mudou. O que mudou foi quem entra na conta.
+
+---
+
 ## 24/09/2026 — painel de médicos atualizado e ciclo 11 nas bases
 
 ### O painel foi atualizado e mudou de tamanho

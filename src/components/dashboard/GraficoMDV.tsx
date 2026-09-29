@@ -28,8 +28,11 @@ const config: LineChartCardConfig = {
     return Math.round((row.total_visitas / row.total_dias) * 10) / 10;
   },
 
-  yDomain: [7, 12],
-  yTicks: [7, 8.25, 9.5, 10.75, 12],
+  // Escala cheia, de 0 a 14, pelo mesmo motivo da Cobertura: barra proporcional
+  // ao valor e nada sumindo por ficar fora do eixo. O teto de 14 dá folga sobre
+  // a meta de 10,8 sem achatar a variação real, que vive entre 9 e 11.
+  yDomain: [0, 14],
+  yTicks: [0, 2, 4, 6, 8, 10, 12, 14],
   yTickFormatter: (v) => v.toFixed(1),
   tooltipFormatter: (v) => `${v.toFixed(1)} visitas`,
   labelFormatValue: (v) => v.toFixed(1),
