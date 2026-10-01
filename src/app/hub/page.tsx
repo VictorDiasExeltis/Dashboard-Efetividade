@@ -7,7 +7,7 @@
 // Para ajustar o relatório externo, mude só as 3 constantes abaixo.
 const REL_EXTERNO = {
   nome: 'Relatório de Demanda e Prescrição',
-  descricao: 'Ações médicas, crescimento de demanda, ranking e análise de tendência.',
+  descricao: 'Ações médicas, ranking e análise de tendência.',
   url: '/relatorio-colega/index.html',         // arquivos ficam em public/relatorio-colega/
 };
 
