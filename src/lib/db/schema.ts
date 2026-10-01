@@ -167,6 +167,9 @@ export const metas_ciclo = pgTable(
     dias_trabalhados: numeric('dias_trabalhados', { precision: 5, scale: 2 }).default('20'),
     tamanho_painel:   integer('tamanho_painel'),
     considerar:       boolean('considerar').default(true),
+    // Nome do representante como veio no relatório daquele ciclo — ver nota no
+    // fim deste arquivo. Só os ciclos 10 e 11 têm; os anteriores ficam nulos.
+    nome_rep_origem:  varchar('nome_rep_origem', { length: 120 }),
   },
   (t) => [
     unique('metas_ciclo_cod_setor_ciclo_key').on(t.cod_setor, t.ciclo),
@@ -305,3 +308,11 @@ export const fato_sincronizacao = pgTable(
     check('fato_sincronizacao_sincronizacoes_check', sql`${t.sincronizacoes} >= 0`),
   ],
 );
+
+// `metas_ciclo.nome_rep_origem` (01/10/2026): o nome do representante como veio
+// no relatório de metas daquele ciclo. dim_hierarquia é mantida à mão e não tem
+// carga; esta coluna é a conferência. Divergência significa estrutura
+// desatualizada OU setor vago no ciclo — e distinguir vaga de afastamento é
+// decisão de gente, não de dado, então a conferência é feita à mão, fora da
+// aplicação. A coluna também guarda quem respondia por cada setor em cada
+// ciclo, que é um histórico que dim_hierarquia não tem.

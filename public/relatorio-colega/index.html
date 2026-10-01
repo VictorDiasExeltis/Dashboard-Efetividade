@@ -36,11 +36,13 @@
 
   <script>
     const TELAS = [
-      { label: 'Ações Médicas',          file: 'tela-1.html' },
-      { label: 'Crescimento de Demanda', file: 'tela-2.html' },
-      { label: 'Ranking',                file: 'tela-3.html' },
-      { label: 'Análise de Tendência',   file: 'tela-4.html' },
+      { label: 'Ações Médicas',        file: 'tela-1.html' },
+      { label: 'Ranking',              file: 'tela-3.html' },
+      { label: 'Análise de Tendência', file: 'tela-4.html' },
     ];
+    // Crescimento de Demanda (tela-2.html) saiu da barra de abas em 01/10/2026.
+    // O arquivo continua na pasta e acessível pela URL direta; para trazer de
+    // volta, basta recolocar a linha acima.
 
     const tabsEl = document.getElementById('tabs');
     const frameEl = document.getElementById('frame');
