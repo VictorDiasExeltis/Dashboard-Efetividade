@@ -109,13 +109,17 @@ export function DetalheAbonos({
           </div>
         ) : (
           <table className="w-full text-xs text-left">
-            <thead className="bg-slate-100/70 text-slate-500 sticky top-0 z-10">
+            {/* O fundo vai no <th>, não no <thead>: com position:sticky o
+                navegador não pinta o fundo do thead em toda situação, e meio
+                tom de transparência deixava as linhas passarem por trás ao
+                rolar. Opaco e por célula é o que segura. */}
+            <thead className="text-slate-500">
               <tr>
-                <th className="px-6 py-2 font-medium w-[280px]">Representante</th>
-                <th className="px-3 py-2 font-medium w-[140px]">Setor</th>
-                <th className="px-3 py-2 font-medium w-[80px]">Data</th>
-                <th className="px-3 py-2 font-medium w-[60px] text-right">Dias</th>
-                <th className="px-3 py-2 pr-6 font-medium">Justificativa</th>
+                <th className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 px-6 py-2 font-medium w-[280px]">Representante</th>
+                <th className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 px-3 py-2 font-medium w-[140px]">Setor</th>
+                <th className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 px-3 py-2 font-medium w-[80px]">Data</th>
+                <th className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 px-3 py-2 font-medium w-[60px] text-right">Dias</th>
+                <th className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 px-3 py-2 pr-6 font-medium">Justificativa</th>
               </tr>
             </thead>
             <tbody>
