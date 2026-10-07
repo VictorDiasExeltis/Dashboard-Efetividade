@@ -124,6 +124,11 @@ export const fato_abonos = pgTable('fato_abonos', {
   motivo:         text('motivo').notNull(),
   data_abono:     date('data_abono').references(() => dim_calendario.data),
   horas_abonadas: numeric('horas_abonadas'),
+  // Texto livre que o representante escreve ao pedir o abono (coluna OBSERVAÇÃO
+  // do relatório de origem). É o único lugar onde o motivo "OUTROS" — o maior
+  // balde do donut de absenteísmo — diz do que se trata. Nulo quando a origem
+  // não exige texto para aquele motivo, ou quando a linha não veio do relatório.
+  observacao:     text('observacao'),
 });
 
 // Segmentação por médico × marca, COM HISTÓRICO desde 2026-09-24.

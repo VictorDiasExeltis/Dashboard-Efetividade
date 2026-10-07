@@ -20,6 +20,7 @@ import { GraficoCobertura } from './GraficoCobertura';
 import { GraficoMDV } from './GraficoMDV';
 import { CoberturaMdvScatter } from './CoberturaMdvScatter';
 import { GraficoAbonos } from './GraficoAbonos';
+import { DetalheAbonos, type AbonoLinha } from './DetalheAbonos';
 import { TabelaRepresentantes } from './TabelaRepresentantes';
 import { useLayout } from '@/src/context/LayoutContext';
 
@@ -75,6 +76,16 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
     motivo: null,
     setores: [],
   });
+  // Abonos individuais do recorte, entregues pelo donut. Vivem aqui porque a
+  // faixa de detalhe fica abaixo do donut E da tabela, na largura inteira.
+  const [abonoDados, setAbonoDados] = React.useState<{ linhas: AbonoLinha[]; cauda: string[] }>({
+    linhas: [],
+    cauda: [],
+  });
+  const receberDados = React.useCallback(
+    (d: { linhas: AbonoLinha[]; cauda: string[] }) => setAbonoDados(d),
+    [],
+  );
   // Limpa a seleção quando muda território/ciclo (os dados de abono mudam).
   React.useEffect(() => {
     setAbonoSel({ motivo: null, setores: [] });
@@ -250,6 +261,7 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
               filtroCiclo={filtroCiclo}
               motivoSelecionado={abonoSel.motivo}
               onSelecaoMotivo={(motivo, setores) => setAbonoSel({ motivo, setores })}
+              onDados={receberDados}
             />
             <TabelaRepresentantes
               filtroDistrito={filtroDistrito}
@@ -260,6 +272,17 @@ export function ExecutiveDashboardClient({ data, searchParams }: ExecutiveDashbo
               onLimparHighlight={() => setAbonoSel({ motivo: null, setores: [] })}
             />
           </div>
+
+          {/* Faixa de detalhe: ocupa a largura inteira do bloco porque a
+              justificativa é texto livre e não cabe na coluna do donut. */}
+          {abonoSel.motivo && (
+            <DetalheAbonos
+              motivo={abonoSel.motivo}
+              linhas={abonoDados.linhas}
+              cauda={abonoDados.cauda}
+              onFechar={() => setAbonoSel({ motivo: null, setores: [] })}
+            />
+          )}
         </section>
       </div>
     </div>

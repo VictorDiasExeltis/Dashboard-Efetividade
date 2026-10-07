@@ -214,6 +214,18 @@ export type LineChartCardConfig = {
   // gráfico de Cobertura × MDV para a cor bater nos três.
 };
 
+// Passo de eixo "redondo" para um vão qualquer: 1, 2, 2,5 ou 5 vezes uma
+// potência de dez, mirando cerca de cinco divisões. É o que faz a escala
+// aproximada ainda cair em números que a pessoa lê sem esforço (50, 60, 70…
+// em vez de 53,9, 61,1, 68,3…).
+function passoBonito(vao: number, divisoes = 5): number {
+  const bruto = vao / divisoes;
+  const magnitude = 10 ** Math.floor(Math.log10(bruto));
+  const normal = bruto / magnitude;
+  const escolhido = normal <= 1 ? 1 : normal <= 2 ? 2 : normal <= 2.5 ? 2.5 : normal <= 5 ? 5 : 10;
+  return escolhido * magnitude;
+}
+
 export function LineChartCard({ config }: { config: LineChartCardConfig }) {
   const searchParams = useSearchParams();
   const [showLabels, setShowLabels] = useState(true);
@@ -226,29 +238,71 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
   // Vazio = todas em destaque (gráfico normal).
   const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
 
-  // Eixo Y que acompanha o dado. O domínio fixo da configuração é só o mínimo
-  // desejado: um valor abaixo do piso (ou acima do teto) some do gráfico sem
-  // aviso, e some parecendo igual a um setor fora do cálculo. Aqui o piso desce
-  // e o teto sobe, em passos do próprio eixo, até caber o que existe.
+  // Barra ou linha: o mesmo card desenha os dois, e cada um exige um eixo Y
+  // diferente. Ver o comentário da escala logo abaixo.
+  const ehBarra = dados.length === 1 || series.length === 1;
+
+  // -------------------------------------------------------------------------
+  // Eixo Y
+  //
+  // A régua muda conforme a marca, e isso não é incoerência — é a regra de cada
+  // uma:
+  //
+  //   BARRA  codifica valor pelo COMPRIMENTO. Tem que sair do zero, senão meia
+  //          barra deixa de valer metade e o desenho mente sobre a proporção.
+  //          Aqui o domínio configurado (0–100%, 0–14) é o piso desejado, e só
+  //          estica se algum valor ficar de fora.
+  //
+  //   LINHA  codifica valor pela POSIÇÃO. Não precisa do zero, e com várias
+  //          séries ela precisa aproximar: na visão por distrito a cobertura
+  //          vive entre 54% e 90%, ou seja, 64% da altura fica vazia e as nove
+  //          linhas se empilham numa faixa estreita. No MDV é pior: 8,4 a 11,4
+  //          num eixo que vai até 14, com 79% de altura morta. Comparar as
+  //          séries é justamente o motivo do gráfico existir.
+  //
+  // O piso da linha sai SEMPRE do próprio dado, arredondado para baixo. É a
+  // diferença para o defeito antigo, em que um piso fixo de 50% engolia todo
+  // setor abaixo disso sem nenhum aviso: aqui nada pode cair fora do eixo.
+  // A linha de meta entra no domínio para continuar visível — sem ela o gráfico
+  // perde a referência que dá sentido à comparação.
+  // -------------------------------------------------------------------------
   const { domain, ticks } = useMemo(() => {
     const [pisoCfg, tetoCfg] = config.yDomain;
-    const passo = config.yTicks.length > 1 ? config.yTicks[1] - config.yTicks[0] : 10;
+    const passoCfg = config.yTicks.length > 1 ? config.yTicks[1] - config.yTicks[0] : 10;
     const valores = dados.flatMap((d) => series.map((s) => d[s]))
       .filter((v): v is number => typeof v === 'number');
     if (valores.length === 0) return { domain: config.yDomain, ticks: config.yTicks };
 
     const min = Math.min(...valores);
     const max = Math.max(...valores);
-    // Desce e sobe em passos inteiros A PARTIR do domínio configurado, para as
-    // marcações continuarem alinhadas com as originais (na MDV o passo é 1,25).
-    const piso = min < pisoCfg ? pisoCfg - Math.ceil((pisoCfg - min) / passo) * passo : pisoCfg;
-    const teto = max > tetoCfg ? tetoCfg + Math.ceil((max - tetoCfg) / passo) * passo : tetoCfg;
-    if (piso === pisoCfg && teto === tetoCfg) return { domain: config.yDomain, ticks: config.yTicks };
+    const marcas = (piso: number, teto: number, passo: number) => {
+      const lista: number[] = [];
+      for (let v = piso; v <= teto + 1e-9; v += passo) lista.push(Number(v.toFixed(2)));
+      return lista;
+    };
 
-    const lista: number[] = [];
-    for (let v = piso; v <= teto + 1e-9; v += passo) lista.push(Number(v.toFixed(2)));
-    return { domain: [piso, teto] as [number, number], ticks: lista };
-  }, [dados, series, config.yDomain, config.yTicks]);
+    if (ehBarra) {
+      // Desce e sobe em passos inteiros A PARTIR do domínio configurado, para as
+      // marcações continuarem alinhadas com as originais.
+      const piso = min < pisoCfg ? pisoCfg - Math.ceil((pisoCfg - min) / passoCfg) * passoCfg : pisoCfg;
+      const teto = max > tetoCfg ? tetoCfg + Math.ceil((max - tetoCfg) / passoCfg) * passoCfg : tetoCfg;
+      if (piso === pisoCfg && teto === tetoCfg) return { domain: config.yDomain, ticks: config.yTicks };
+      return { domain: [piso, teto] as [number, number], ticks: marcas(piso, teto, passoCfg) };
+    }
+
+    // Linha: aproxima até o dado, com a meta dentro.
+    const meta = config.referenceLine.y;
+    const alvoMin = Math.min(min, meta);
+    const alvoMax = Math.max(max, meta);
+    const vao = alvoMax - alvoMin;
+    // Todas as séries no mesmo valor: não há vão para repartir.
+    if (!(vao > 0)) return { domain: config.yDomain, ticks: config.yTicks };
+
+    const passo = passoBonito(vao);
+    const piso = Math.max(pisoCfg, Math.floor(alvoMin / passo) * passo);
+    const teto = Math.ceil(alvoMax / passo) * passo;
+    return { domain: [piso, teto] as [number, number], ticks: marcas(piso, teto, passo) };
+  }, [dados, series, ehBarra, config.yDomain, config.yTicks, config.referenceLine]);
 
   const toggleSeries = (label: string) => {
     setHighlighted((prev) => {
@@ -466,7 +520,7 @@ export function LineChartCard({ config }: { config: LineChartCardConfig }) {
         <div className="h-[400px] w-full mt-4">
           {mounted && (
             <ResponsiveContainer width="100%" height="100%">
-              {dados.length === 1 || series.length === 1 ? (
+              {ehBarra ? (
                 // Vira barras quando qualquer um dos eixos colapsa para um só:
                 //
                 //   1 ciclo    -> uma barra por estrutura (o LineChart daria um
