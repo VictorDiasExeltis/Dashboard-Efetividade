@@ -12,6 +12,7 @@ import {
   Lightbulb,
   Search,
   UploadCloud,
+  ArrowLeft,
   X
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -125,6 +126,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Main Navigation */}
         <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
+          {/* Volta para a Central de Relatórios (/hub), de onde o usuário escolhe
+              entre este dashboard e os relatórios da área. Com borda, para não
+              ser confundido com uma tela do dashboard. */}
+          <Link
+            href="/hub"
+            onClick={onClose}
+            className="mt-2 flex items-center gap-3 px-3 py-2 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Central de Relatórios
+          </Link>
+
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">
             SFE Dashboard
           </div>
